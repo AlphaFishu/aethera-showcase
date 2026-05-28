@@ -230,6 +230,7 @@ const fastAtan2 = (y: number, x: number): number => {
 
 export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   mode,
+  audioEnabled,
   onAudioStateChange,
   onSetAnalyser,
   isPlayingMelody,
@@ -456,7 +457,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioCtx();
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
+      analyser.fftSize = 2048;
       
       audioCtxRef.current = ctx;
       analyserRef.current = analyser;
@@ -1271,6 +1272,21 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       lastSongIndexRef.current = null; // reset transition tracking when stopped
     }
   }, [isPlayingMelody, songIndex]);
+
+  // Sync AudioContext state with audioEnabled prop
+  useEffect(() => {
+    if (audioEnabled) {
+      if (!audioCtxRef.current) {
+        initAudio();
+      } else if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume();
+      }
+    } else {
+      if (audioCtxRef.current && audioCtxRef.current.state === 'running') {
+        audioCtxRef.current.suspend();
+      }
+    }
+  }, [audioEnabled]);
 
   // Handle pointer interactions
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {

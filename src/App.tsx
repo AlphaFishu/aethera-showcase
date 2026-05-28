@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { FluidSandbox } from './components/FluidSandbox';
-import { Sparkles, Activity, Volume2, VolumeX, Play, Pause, Music } from 'lucide-react';
+import { Sparkles, Activity, Volume2, VolumeX, Play, Pause, Music, SkipForward } from 'lucide-react';
 import './App.css';
 
 const SONG_NAMES = ["DIHUA MARSH", "ENTELECHY"];
@@ -50,7 +50,7 @@ function App() {
       analyser.getByteTimeDomainData(dataArray);
 
       ctx.clearRect(0, 0, scopeCanvas.width, scopeCanvas.height);
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth = 1.0;
       
       // Read dynamic accent color
       const activeColor = getComputedStyle(document.documentElement).getPropertyValue('--accent-active').trim();
@@ -156,9 +156,9 @@ function App() {
                 gap: '8px',
               }}
             >
-              AETHERA
-              <span style={{ fontSize: '9px', fontWeight: 500, color: 'var(--text-secondary)', opacity: 0.6 }}>
-                // KINETIC SOUND & LIGHT
+              AETHERA KINETIC
+              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', opacity: 0.6 }}>
+                // by Nino AlphaFish
               </span>
             </h1>
           </div>
@@ -202,36 +202,48 @@ function App() {
                 pointerEvents: 'auto',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
+                gap: '8px',
                 height: '32px',
                 padding: '0 12px',
                 background: 'rgba(255, 255, 255, 0.05)',
                 borderColor: 'rgba(255, 255, 255, 0.1)',
               }}
             >
-              <span>NEXT SONG &gt;</span>
+              <span>NEXT SONG</span>
+              <SkipForward size={11} fill="currentColor" />
             </button>
           )}
 
-          <div
+          <button
+            type="button"
+            className="hud-btn"
+            onClick={() => {
+              setAudioEnabled(!audioEnabled);
+            }}
             style={{
+              pointerEvents: 'auto',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(255,255,255,0.05)',
-              borderRadius: '10px',
-              padding: '6px 12px',
+              height: '32px',
+              padding: '0 12px',
               fontSize: '10px',
               fontWeight: 700,
               color: audioEnabled ? '#fff' : 'var(--text-secondary)',
-              height: '32px',
+              cursor: 'pointer',
+              background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(255,255,255,0.05)',
+              borderRadius: '10px',
             }}
           >
-            {audioEnabled ? <Volume2 size={12} style={{ color: 'var(--accent-active)' }} /> : <VolumeX size={12} />}
-            <span>{audioEnabled ? 'SYNTH ACTIVE' : 'TAP TO UNLOCK CHIMES'}</span>
-            <span className="glow-indicator" />
-          </div>
+            {audioEnabled ? (
+              <Volume2 size={12} style={{ color: 'var(--accent-active)' }} />
+            ) : (
+              <VolumeX size={12} style={{ color: 'var(--text-secondary)' }} />
+            )}
+            <span>{audioEnabled ? 'SOUND ON' : 'SOUND OFF'}</span>
+            {audioEnabled && <span className="glow-indicator" />}
+          </button>
         </div>
       </header>
 
