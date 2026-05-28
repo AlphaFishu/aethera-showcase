@@ -1,0 +1,134 @@
+/* Aethera Kinetic Sandbox Styling */
+
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Outfit', system-ui, -apple-system, sans-serif;
+
+  /* Color Palette */
+  --bg-deep: #030303;
+  --bg-hud: rgba(10, 10, 15, 0.4);
+  --text-primary: #ffffff;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
+
+  /* Neon Accent states */
+  --accent-cosmic: #8b5cf6;
+  --accent-chrome: #06b6d4;
+  --accent-biolume: #10b981;
+  --accent-active: var(--accent-cosmic);
+  --accent-glow: rgba(139, 92, 246, 0.2);
+
+  font-family: var(--font-sans);
+  color-scheme: dark;
+  background-color: var(--bg-deep);
+  color: var(--text-secondary);
+
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body, html, #root {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--bg-deep);
+}
+
+#root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Glassmorphic HUD overlay styling */
+.hud-card {
+  background: var(--bg-hud);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  border-radius: 20px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hud-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.02);
+}
+
+/* Minimal HUD Buttons */
+.hud-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  border-radius: 12px;
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  alignItems: center;
+  gap: 8px;
+}
+
+.hud-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.hud-btn.active {
+  background: var(--accent-glow);
+  border-color: var(--accent-active);
+  color: var(--text-primary);
+  box-shadow: 0 0 15px var(--accent-glow);
+}
+
+/* Headings */
+h1, h2, h3 {
+  font-family: var(--font-heading);
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+/* Sound Wave ripples */
+@keyframes waveRipple {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* Glowing typography badge */
+.glow-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-active);
+  box-shadow: 0 0 8px var(--accent-active);
+  display: inline-block;
+  transition: all 0.3s;
+}
+
+/* Selection */
+::selection {
+  background: var(--accent-glow);
+  color: #fff;
+}
