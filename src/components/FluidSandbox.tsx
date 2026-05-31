@@ -308,12 +308,14 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   // Grand Hanabi Festival firework shell styles
   const spawnHanabi = (x: number, y: number, baseHue: number) => {
     const style = Math.floor(Math.random() * 6); // 6 different Japanese firework shell styles
+    const rangeScale = 0.75; // 25% reduction in explosion range (particle velocity)
+    const countScale = isMobile ? 0.80 : 1.0; // 20% reduction in particle amount on mobile
 
     if (style === 0) {
       // Style 0: Imperial Peony (Double-Ring with golden core) - Ultra dense
       // Outer magenta/pink ring
-      const outerCount = 160;
-      const outerSpeed = 6.8;
+      const outerCount = Math.round(160 * countScale);
+      const outerSpeed = 6.8 * rangeScale;
       const outerHue = baseHue;
       const outerRot = Math.random() * Math.PI * 2;
       for (let j = 0; j < outerCount; j++) {
@@ -330,8 +332,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         });
       }
       // Inner cyan/green ring
-      const innerCount = 100;
-      const innerSpeed = 4.2;
+      const innerCount = Math.round(100 * countScale);
+      const innerSpeed = 4.2 * rangeScale;
       const innerHue = (baseHue + 120) % 360;
       const innerRot = Math.random() * Math.PI * 2;
       for (let j = 0; j < innerCount; j++) {
@@ -348,8 +350,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         });
       }
       // Golden core pistil (glowing center)
-      const coreCount = 60;
-      const coreSpeed = 1.8;
+      const coreCount = Math.round(60 * countScale);
+      const coreSpeed = 1.8 * rangeScale;
       for (let j = 0; j < coreCount; j++) {
         const angle = Math.random() * Math.PI * 2;
         const pSpeed = coreSpeed * (0.4 + Math.random() * 1.2);
@@ -365,8 +367,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
     } else if (style === 1) {
       // Style 1: Golden Kamuro Crown (Glittering Weeping Willow) - Dense gold arcs
-      const count = 280;
-      const speed = 7.2;
+      const count = Math.round(280 * countScale);
+      const speed = 7.2 * rangeScale;
       const goldHue = 36 + Math.random() * 8; // Pure gold/orange
       for (let j = 0; j < count; j++) {
         const angle = Math.random() * Math.PI * 2;
@@ -384,8 +386,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
     } else if (style === 2) {
       // Style 2: Flashing Chrysanthemum - Dense purple sphere with flash core
-      const outerCount = 180;
-      const outerSpeed = 6.2;
+      const outerCount = Math.round(180 * countScale);
+      const outerSpeed = 6.2 * rangeScale;
       const outerHue = (baseHue + 240) % 360; // blue/purple contrast
       for (let j = 0; j < outerCount; j++) {
         const angle = (j / outerCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
@@ -401,8 +403,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         });
       }
       // Inner flashing core
-      const innerCount = 100;
-      const innerSpeed = 3.0;
+      const innerCount = Math.round(100 * countScale);
+      const innerSpeed = 3.0 * rangeScale;
       for (let j = 0; j < innerCount; j++) {
         const angle = Math.random() * Math.PI * 2;
         const pSpeed = innerSpeed * (0.6 + Math.random() * 0.8);
@@ -418,8 +420,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
     } else if (style === 3) {
       // Style 3: Crossette Star (Dense Ring with spoked crossette rays)
-      const mainCount = 140;
-      const mainSpeed = 5.4;
+      const mainCount = Math.round(140 * countScale);
+      const mainSpeed = 5.4 * rangeScale;
       const ringHue = baseHue;
       const ringRot = Math.random() * Math.PI * 2;
       for (let j = 0; j < mainCount; j++) {
@@ -437,13 +439,13 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
       // Spokes: 6 rays shooting out at high velocity
       const spokesCount = 6;
-      const sparksPerSpoke = 10;
+      const sparksPerSpoke = Math.round(10 * countScale);
       const spokeHue = (baseHue + 60) % 360;
       const spokeRotOffset = Math.random() * Math.PI * 2;
       for (let s = 0; s < spokesCount; s++) {
         const spokeAngle = (s / spokesCount) * Math.PI * 2 + spokeRotOffset;
         for (let pIdx = 0; pIdx < sparksPerSpoke; pIdx++) {
-          const pSpeed = 4.0 + pIdx * 0.8 + Math.random() * 0.4;
+          const pSpeed = (4.0 + pIdx * 0.8 + Math.random() * 0.4) * rangeScale;
           particles.current.push({
             x,
             y,
@@ -462,8 +464,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       const h = canvas ? canvas.height : window.innerHeight;
 
       // 1. Golden weeping crown in the sky
-      const crownCount = 180;
-      const crownSpeed = 6.5;
+      const crownCount = Math.round(180 * countScale);
+      const crownSpeed = 6.5 * rangeScale;
       const goldHue = 36 + Math.random() * 8; // Pure gold/orange
       for (let j = 0; j < crownCount; j++) {
         const angle = Math.random() * Math.PI * 2;
@@ -484,12 +486,12 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       const fanPositions = [x - 80, x - 40, x, x + 40, x + 80];
       fanPositions.forEach((px) => {
         if (px >= 0 && px <= w) {
-          const mineSparks = 12;
+          const mineSparks = Math.round(12 * countScale);
           const greenHue = 145 + Math.random() * 20; // Vibrant emerald
           for (let m = 0; m < mineSparks; m++) {
             // Tight upward fan angles centered around -90 deg
             const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.32;
-            const pSpeed = Math.random() * 5.0 + 8.0;
+            const pSpeed = (Math.random() * 5.0 + 8.0) * rangeScale;
             particles.current.push({
               x: px,
               y: h,
@@ -509,8 +511,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       const h = canvas ? canvas.height : window.innerHeight;
 
       // 1. Upper blue peony shell (slightly offset higher)
-      const blueCount = 140;
-      const blueSpeed = 5.5;
+      const blueCount = Math.round(140 * countScale);
+      const blueSpeed = 5.5 * rangeScale;
       const blueHue = 190 + Math.random() * 20; // Deep cyan/blue
       for (let j = 0; j < blueCount; j++) {
         const angle = Math.random() * Math.PI * 2;
@@ -527,8 +529,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
 
       // 2. Lower pink peony shell (slightly offset lower)
-      const pinkCount = 140;
-      const pinkSpeed = 5.0;
+      const pinkCount = Math.round(140 * countScale);
+      const pinkSpeed = 5.0 * rangeScale;
       const pinkHue = 320 + Math.random() * 20; // Pink/magenta
       for (let j = 0; j < pinkCount; j++) {
         const angle = Math.random() * Math.PI * 2;
@@ -548,11 +550,11 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       const fanPositions = [x - 60, x, x + 60];
       fanPositions.forEach((px) => {
         if (px >= 0 && px <= w) {
-          const mineSparks = 10;
+          const mineSparks = Math.round(10 * countScale);
           const goldHue = 36 + Math.random() * 8;
           for (let m = 0; m < mineSparks; m++) {
             const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.28;
-            const pSpeed = Math.random() * 4.0 + 7.0;
+            const pSpeed = (Math.random() * 4.0 + 7.0) * rangeScale;
             particles.current.push({
               x: px,
               y: h,
@@ -1027,7 +1029,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           }
 
           // Draw fine-grain combustion spark core
-          const radius = (0.35 + p.life * 0.65) * (isMobile ? 0.75 : 1.0); // 25% smaller core on mobile
+          const radius = (0.35 + p.life * 0.65) * (isMobile ? 1.35 : 1.0); // 35% larger core on mobile
           drawCtx.beginPath();
           drawCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
           

@@ -275,7 +275,7 @@ function App() {
       <footer
         style={{
           position: 'absolute',
-          bottom: '20px',
+          bottom: '40px',
           left: '20px',
           width: 'calc(100vw - 40px)',
           display: 'flex',
