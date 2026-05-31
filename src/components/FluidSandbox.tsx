@@ -998,7 +998,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           const baseAlpha = p.isBurst ? p.life : 1.0;
           const alpha = Math.min(0.8, (0.2 + speed * 0.1) * baseAlpha);
           drawCtx.beginPath();
-          const r = isMobile ? 1.8 : 1.2; // 2x increase on mobile
+          const r = isMobile ? 1.35 : 1.2; // 25% reduction on mobile
           drawCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
           drawCtx.fillStyle = `hsla(${270 + speed * 20}, 85%, 65%, ${alpha})`;
           drawCtx.fill();
@@ -1594,7 +1594,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       onPointerLeave={handlePointerUp}
       style={{
         width: '100vw',
-        height: '100vh',
+        height: '100dvh',
         display: 'block',
         touchAction: 'none',
         cursor: 'crosshair',

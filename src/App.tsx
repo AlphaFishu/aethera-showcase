@@ -111,7 +111,7 @@ function App() {
     <div
       style={{
         width: '100vw',
-        height: '100vh',
+        height: '100dvh',
         position: 'relative',
         background: '#030303',
         overflow: 'hidden',
