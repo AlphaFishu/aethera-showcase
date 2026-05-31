@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 interface FluidSandboxProps {
   mode: 'cosmic' | 'biolume' | 'hanabi' | 'sands';
   audioEnabled: boolean;
+  isMobile: boolean;
   onAudioStateChange: (enabled: boolean) => void;
   onSetAnalyser: (analyser: AnalyserNode | null) => void;
   isPlayingMelody: boolean;
@@ -18,6 +19,8 @@ interface Particle {
   hue: number;
   isBurst?: boolean;
   spin?: number;
+  homeX?: number;
+  homeY?: number;
 }
 
 interface VisualRipple {
@@ -231,6 +234,7 @@ const fastAtan2 = (y: number, x: number): number => {
 export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   mode,
   audioEnabled,
+  isMobile,
   onAudioStateChange,
   onSetAnalyser,
   isPlayingMelody,
@@ -267,11 +271,15 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   };
 
   const addVisualRipple = (x: number, y: number) => {
+    // Limit active ripples to 3 to prevent performance degradation and overlapping overwrites
+    if (ripples.current.length >= 3) {
+      ripples.current.shift();
+    }
     ripples.current.push({
       x,
       y,
       radius: 4,
-      maxRadius: 190, // Reduced by 15% (from 225 to 190)
+      maxRadius: isMobile ? 123.5 : 190, // 35% smaller on mobile
       alpha: 1.0,
       elapsedTime: 0,
       duration: 1300, // 50% slower / 1.3 seconds duration
@@ -299,7 +307,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
   // Grand Hanabi Festival firework shell styles
   const spawnHanabi = (x: number, y: number, baseHue: number) => {
-    const style = Math.floor(Math.random() * 4); // 4 different Japanese firework shell styles
+    const style = Math.floor(Math.random() * 6); // 6 different Japanese firework shell styles
 
     if (style === 0) {
       // Style 0: Imperial Peony (Double-Ring with golden core) - Ultra dense
@@ -408,7 +416,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           isBurst: true,
         });
       }
-    } else {
+    } else if (style === 3) {
       // Style 3: Crossette Star (Dense Ring with spoked crossette rays)
       const mainCount = 140;
       const mainSpeed = 5.4;
@@ -447,6 +455,117 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           });
         }
       }
+    } else if (style === 4) {
+      // Style 4: Nagaoka Gold Weeping Willow & Emerald Green Fan Mines
+      const canvas = canvasRef.current;
+      const w = canvas ? canvas.width : window.innerWidth;
+      const h = canvas ? canvas.height : window.innerHeight;
+
+      // 1. Golden weeping crown in the sky
+      const crownCount = 180;
+      const crownSpeed = 6.5;
+      const goldHue = 36 + Math.random() * 8; // Pure gold/orange
+      for (let j = 0; j < crownCount; j++) {
+        const angle = Math.random() * Math.PI * 2;
+        const pSpeed = crownSpeed * (0.2 + Math.pow(Math.random(), 1.6) * 0.8);
+        particles.current.push({
+          x,
+          y,
+          vx: Math.cos(angle) * pSpeed,
+          vy: Math.sin(angle) * pSpeed,
+          life: 1.0,
+          hue: goldHue,
+          isBurst: true,
+          spin: -999, // Weeping/glittering physics
+        });
+      }
+
+      // 2. Fanned emerald green mines shooting from the ground
+      const fanPositions = [x - 80, x - 40, x, x + 40, x + 80];
+      fanPositions.forEach((px) => {
+        if (px >= 0 && px <= w) {
+          const mineSparks = 12;
+          const greenHue = 145 + Math.random() * 20; // Vibrant emerald
+          for (let m = 0; m < mineSparks; m++) {
+            // Tight upward fan angles centered around -90 deg
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.32;
+            const pSpeed = Math.random() * 5.0 + 8.0;
+            particles.current.push({
+              x: px,
+              y: h,
+              vx: Math.cos(angle) * pSpeed,
+              vy: Math.sin(angle) * pSpeed,
+              life: 1.0,
+              hue: greenHue,
+              isBurst: true,
+            });
+          }
+        }
+      });
+    } else {
+      // Style 5: Nagaoka Blue-Pink Peony Canopy with Gold Fan Mines
+      const canvas = canvasRef.current;
+      const w = canvas ? canvas.width : window.innerWidth;
+      const h = canvas ? canvas.height : window.innerHeight;
+
+      // 1. Upper blue peony shell (slightly offset higher)
+      const blueCount = 140;
+      const blueSpeed = 5.5;
+      const blueHue = 190 + Math.random() * 20; // Deep cyan/blue
+      for (let j = 0; j < blueCount; j++) {
+        const angle = Math.random() * Math.PI * 2;
+        const pSpeed = blueSpeed * (0.8 + Math.random() * 0.3);
+        particles.current.push({
+          x,
+          y: y - 40,
+          vx: Math.cos(angle) * pSpeed,
+          vy: Math.sin(angle) * pSpeed,
+          life: 1.0,
+          hue: blueHue,
+          isBurst: true,
+        });
+      }
+
+      // 2. Lower pink peony shell (slightly offset lower)
+      const pinkCount = 140;
+      const pinkSpeed = 5.0;
+      const pinkHue = 320 + Math.random() * 20; // Pink/magenta
+      for (let j = 0; j < pinkCount; j++) {
+        const angle = Math.random() * Math.PI * 2;
+        const pSpeed = pinkSpeed * (0.8 + Math.random() * 0.3);
+        particles.current.push({
+          x,
+          y: y + 10,
+          vx: Math.cos(angle) * pSpeed,
+          vy: Math.sin(angle) * pSpeed,
+          life: 1.0,
+          hue: pinkHue,
+          isBurst: true,
+        });
+      }
+
+      // 3. Fanned gold mines shooting from the ground
+      const fanPositions = [x - 60, x, x + 60];
+      fanPositions.forEach((px) => {
+        if (px >= 0 && px <= w) {
+          const mineSparks = 10;
+          const goldHue = 36 + Math.random() * 8;
+          for (let m = 0; m < mineSparks; m++) {
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.28;
+            const pSpeed = Math.random() * 4.0 + 7.0;
+            particles.current.push({
+              x: px,
+              y: h,
+              vx: Math.cos(angle) * pSpeed,
+              vy: Math.sin(angle) * pSpeed,
+              life: 1.0,
+              hue: goldHue,
+              isBurst: true,
+              spin: -999, // Weeping/glittering physics
+            });
+          }
+        }
+      });
     }
   };
 
@@ -471,7 +590,12 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   const playChime = (xNormalized: number, force: number, customFreq?: number) => {
     const ctx = audioCtxRef.current;
     const analyser = analyserRef.current;
-    if (!ctx || !analyser || ctx.state === 'suspended') return;
+    if (!ctx || !analyser) return;
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+      return; // Skip this chime note to avoid queueing on suspended state
+    }
 
     let freq = customFreq;
     if (freq === undefined) {
@@ -524,22 +648,30 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
     const v = vGrid.current;
     const density = densityGrid.current;
 
-    const gridCenterX = (x / canvasWidth) * GRID_X;
-    const gridCenterY = (y / canvasHeight) * GRID_Y;
-    const shockRadius = 6.0;
+    const baseShockRadiusPx = 220.0; // Symmetrical pixel radius on desktop
+    const shockRadiusPx = isMobile ? baseShockRadiusPx * 0.65 : baseShockRadiusPx; // 35% smaller on mobile
 
     for (let gy = 0; gy < GRID_Y; gy++) {
+      const cellY = ((gy + 0.5) / GRID_Y) * canvasHeight;
+      const dy = cellY - y;
+
       for (let gx = 0; gx < GRID_X; gx++) {
         const idx = gx + gy * GRID_X;
-        const dx = gx - gridCenterX;
-        const dy = gy - gridCenterY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const cellX = ((gx + 0.5) / GRID_X) * canvasWidth;
+        const dx = cellX - x;
 
-        if (dist < shockRadius && dist > 0) {
-          const force = (shockRadius - dist) / shockRadius;
-          const pushForce = force * 6.5;
-          u[idx] += (dx / dist) * pushForce;
-          v[idx] += (dy / dist) * pushForce;
+        const distPx = Math.sqrt(dx * dx + dy * dy);
+
+        if (distPx < shockRadiusPx && distPx > 0) {
+          const force = (shockRadiusPx - distPx) / shockRadiusPx;
+          let pushForce = force * 6.5;
+          if (isMobile && mode === 'cosmic') {
+            pushForce *= 0.3; // 70% reduction
+          }
+
+          // Push force vector is relative to true pixel direction (dx/distPx, dy/distPx)
+          u[idx] += (dx / distPx) * pushForce;
+          v[idx] += (dy / distPx) * pushForce;
           density[idx] += force * 4.0;
 
           // Clamp velocity in the grid to prevent explosion and dead zones
@@ -585,17 +717,49 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
 
       initParticles();
+
+      // Automatically resume AudioContext if it gets suspended due to resolution/device toolbar changes
+      if (audioEnabled && audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume().catch(() => {});
+      }
     };
 
     const initParticles = () => {
       particles.current = [];
-      const count = mode === 'cosmic' ? 6000 : mode === 'biolume' ? 2500 : mode === 'hanabi' ? 0 : 4500;
+      const baseArea = 1920 * 1080;
+      const currentArea = canvas.width * canvas.height;
+      const areaRatio = currentArea / baseArea;
+
+      // Soft scaling: use the square root of the area ratio so it scales down more gently
+      const scale = Math.max(0.4, Math.sqrt(areaRatio));
+
+      let baseCount = mode === 'cosmic' ? 6000 : mode === 'biolume' ? 2500 : mode === 'hanabi' ? 0 : 4500;
+      let count = Math.round(baseCount * scale);
+
+      if (isMobile) {
+        // Apply the 30% reduction on mobile
+        count = Math.round(count * 0.70);
+        // Ensure a healthy minimum so it remains visually rich and interactive
+        if (mode === 'cosmic') count = Math.max(2200, count);
+        else if (mode === 'biolume') count = Math.max(1200, count);
+        else if (mode === 'sands') count = Math.max(1800, count);
+      } else {
+        // On desktop, ensure a minimum count as well
+        if (mode === 'cosmic') count = Math.max(4000, count);
+        else if (mode === 'biolume') count = Math.max(1800, count);
+        else if (mode === 'sands') count = Math.max(3000, count);
+      }
+
       particleCount.current = count;
 
       for (let i = 0; i < count; i++) {
+        const rx = Math.random() * canvas.width;
+        const ry = Math.random() * canvas.height;
         particles.current.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
+          x: rx,
+          y: ry,
+          homeX: rx,
+          homeY: ry,
           vx: 0,
           vy: 0,
           life: Math.random() * 0.5 + 0.5,
@@ -613,6 +777,10 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
       const trailsCanvas = trailsCanvasRef.current;
       const trailsCtx = trailsCanvas ? trailsCanvas.getContext('2d') : null;
+
+      // Clear the main canvas to background color before redrawing
+      ctx.fillStyle = mode === 'hanabi' ? '#000000' : '#030303';
+      ctx.fillRect(0, 0, w, h);
 
       // 1. Calculate delta time unconditionally (keeps physics/particles/ripples running when autoplay is off)
       const now = performance.now();
@@ -650,20 +818,22 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
       // 3. Clear/Fade trails canvas (draw background fades depending on render mode)
       if (trailsCtx) {
+        // Fade the existing trails on the offscreen canvas by subtracting alpha (keeping background fully transparent)
+        trailsCtx.save();
+        trailsCtx.globalCompositeOperation = 'destination-out';
         if (mode === 'cosmic') {
-          trailsCtx.fillStyle = 'rgba(3, 3, 3, 0.08)'; // Medium trails
-          trailsCtx.fillRect(0, 0, w, h);
+          trailsCtx.fillStyle = 'rgba(0, 0, 0, 0.08)';
         } else if (mode === 'hanabi') {
-          trailsCtx.fillStyle = 'rgba(0, 0, 0, 0.22)'; // Faster fade for sharper sparks
-          trailsCtx.fillRect(0, 0, w, h);
+          trailsCtx.fillStyle = 'rgba(0, 0, 0, 0.22)';
         } else if (mode === 'sands') {
-          trailsCtx.fillStyle = 'rgba(3, 3, 3, 0.22)'; // Faster fade to keep 1px sand grains crisp
-          trailsCtx.fillRect(0, 0, w, h);
+          trailsCtx.fillStyle = 'rgba(0, 0, 0, 0.22)';
         } else {
-          trailsCtx.fillStyle = 'rgba(3, 3, 3, 0.04)'; // Long neon trails (biolume)
-          trailsCtx.fillRect(0, 0, w, h);
+          trailsCtx.fillStyle = 'rgba(0, 0, 0, 0.08)'; // Biolume
         }
+        trailsCtx.fillRect(0, 0, w, h);
+        trailsCtx.restore();
       } else {
+        // Fallback: without offscreen buffer, we clear with alpha directly on main canvas
         if (mode === 'cosmic') {
           ctx.fillStyle = 'rgba(3, 3, 3, 0.08)';
           ctx.fillRect(0, 0, w, h);
@@ -674,7 +844,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           ctx.fillStyle = 'rgba(3, 3, 3, 0.22)';
           ctx.fillRect(0, 0, w, h);
         } else {
-          ctx.fillStyle = 'rgba(3, 3, 3, 0.04)';
+          ctx.fillStyle = 'rgba(3, 3, 3, 0.08)';
           ctx.fillRect(0, 0, w, h);
         }
       }
@@ -701,7 +871,11 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
               p.vx += (Math.random() - 0.5) * 0.06;
             }
           } else {
-            p.life -= dt / 2500; // Fly for ~2.5s (allows lingering trails)
+            let decayDivisor = 2500;
+            if (mode === 'biolume') {
+              decayDivisor = isMobile ? 2700 : 2500; // 0.2s longer on mobile (2700ms)
+            }
+            p.life -= dt / decayDivisor; // Fly for ~2.5s (allows lingering trails)
             if (p.life <= 0) return false;
             
             // Apply gentle speed reduction so they slow down but glide much further
@@ -730,19 +904,22 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
             p.vx = p.vx * (1 - blend) + u[idx] * blend;
             p.vy = p.vy * (1 - blend) + v[idx] * blend;
           } else {
-            p.vx = p.vx * 0.85 + u[idx] * 0.15;
-            p.vy = p.vy * 0.85 + v[idx] * 0.15;
+            const blend = 0.15;
+            p.vx = p.vx * (1 - blend) + u[idx] * blend;
+            p.vy = p.vy * (1 - blend) + v[idx] * blend;
           }
         }
 
         // Organic random curling for Biolume Trails
         if (mode === 'biolume') {
           if (p.spin === undefined) {
-            p.spin = (Math.random() - 0.5) * 0.28;
+            p.spin = (Math.random() - 0.5) * (isMobile ? 0.6 : 0.28);
           }
-          // Slow random walk for spin changes (creates organic, winding curves)
-          p.spin += (Math.random() - 0.5) * 0.04;
-          p.spin = Math.max(-0.25, Math.min(0.25, p.spin));
+          // Slow random walk for spin changes (creates organic, winding curves; more 'frazzly' on mobile)
+          const spinDelta = isMobile ? 0.12 : 0.04;
+          p.spin += (Math.random() - 0.5) * spinDelta;
+          const maxSpin = isMobile ? 0.5 : 0.25;
+          p.spin = Math.max(-maxSpin, Math.min(maxSpin, p.spin));
 
           // Rotate velocity vector
           const cos = Math.cos(p.spin);
@@ -750,9 +927,10 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           const rx = p.vx * cos - p.vy * sin;
           const ry = p.vx * sin + p.vy * cos;
           
-          // Blend curved momentum
-          p.vx = p.vx * 0.78 + rx * 0.22;
-          p.vy = p.vy * 0.78 + ry * 0.22;
+          // Blend curved momentum (tighter curves on mobile)
+          const blendCurved = isMobile ? 0.35 : 0.22;
+          p.vx = p.vx * (1 - blendCurved) + rx * blendCurved;
+          p.vy = p.vy * (1 - blendCurved) + ry * blendCurved;
         }
 
         // Flowing Sands Mode: falling and wind swirling blizzard mechanics
@@ -777,6 +955,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           p.vx *= 0.95;
           p.vy *= 0.95;
         }
+
+
 
         // Add ambient drift
         p.x += p.vx + (Math.random() - 0.5) * 0.1;
@@ -818,7 +998,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           const baseAlpha = p.isBurst ? p.life : 1.0;
           const alpha = Math.min(0.8, (0.2 + speed * 0.1) * baseAlpha);
           drawCtx.beginPath();
-          drawCtx.arc(p.x, p.y, 1.2, 0, Math.PI * 2);
+          const r = isMobile ? 1.8 : 1.2; // 2x increase on mobile
+          drawCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
           drawCtx.fillStyle = `hsla(${270 + speed * 20}, 85%, 65%, ${alpha})`;
           drawCtx.fill();
         } else if (mode === 'hanabi') {
@@ -838,7 +1019,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
             drawCtx.strokeStyle = p.spin === -999 
               ? `rgba(255, 180, 50, ${alpha * 0.38})` // Gold trail
               : `hsla(${currentHue}, 95%, 65%, ${alpha * 0.35})`;
-            drawCtx.lineWidth = 0.45; // Ultra fine trail lines
+            drawCtx.lineWidth = isMobile ? 0.35 : 0.45; // Finer trail lines on mobile
             drawCtx.beginPath();
             drawCtx.moveTo(p.x - p.vx * 2.2, p.y - p.vy * 2.2); // Longer trail line
             drawCtx.lineTo(p.x, p.y);
@@ -846,7 +1027,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           }
 
           // Draw fine-grain combustion spark core
-          const radius = 0.35 + p.life * 0.65; // ultra fine 0.35px to 1.0px
+          const radius = (0.35 + p.life * 0.65) * (isMobile ? 0.75 : 1.0); // 25% smaller core on mobile
           drawCtx.beginPath();
           drawCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
           
@@ -859,24 +1040,27 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           }
           drawCtx.fill();
         } else if (mode === 'sands') {
-          // Flowing Sands Mode: 1px ice-white and pale-cyan blizzard sand grains
+          // Flowing Sands Mode: ice-white and pale-cyan blizzard sand grains (smaller on mobile)
           const alpha = Math.min(0.85, 0.35 + speed * 0.15);
           const isCyan = (p.hue % 5) === 0;
           drawCtx.fillStyle = isCyan 
             ? `rgba(165, 243, 252, ${alpha})` // Cyan-ice
             : `rgba(240, 248, 255, ${alpha})`; // Alice-blue/white
-          drawCtx.fillRect(Math.floor(p.x), Math.floor(p.y), 1.0, 1.0);
+          const sSize = isMobile ? 2.0 : 1.0; // 2x larger on mobile
+          drawCtx.fillRect(p.x, p.y, sSize, sSize);
         } else {
           // Biolume Trails Mode: Colorful fluid vector brush lines
           const baseAlpha = p.isBurst ? p.life : 1.0;
-          const alpha = Math.min(0.9, (0.15 + speed * 0.25) * baseAlpha);
+          // Alpha scales directly with speed so stationary background particles fade out completely
+          const alpha = Math.min(0.9, (speed * 0.35) * baseAlpha);
           const hue = (p.hue + speed * 5) % 360;
           drawCtx.strokeStyle = `hsla(${hue}, 90%, 60%, ${alpha})`;
-          drawCtx.lineWidth = Math.min(2.5, 0.8 + speed * 0.4) * (p.isBurst ? Math.sqrt(p.life) : 1.0);
+          const rawWidth = Math.min(2.5, 0.8 + speed * 0.4) * (p.isBurst ? Math.sqrt(p.life) : 1.0);
+          drawCtx.lineWidth = rawWidth * (isMobile ? 0.65 : 1.0); // 35% smaller on mobile
           drawCtx.beginPath();
 
-          // Limit line trail length to prevent long lines connecting back to epicenter
-          const maxTrailLen = 8.0;
+          // Limit line trail length to prevent long lines connecting back to epicenter (35% shorter on mobile)
+          const maxTrailLen = isMobile ? 5.2 : 8.0;
           const trailLen = Math.min(maxTrailLen, speed * 1.5);
           const dx = speed > 0 ? (p.vx / speed) * trailLen : 0;
           const dy = speed > 0 ? (p.vy / speed) * trailLen : 0;
@@ -894,14 +1078,22 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
       // 5. Draw channel dots nodes on main canvas
       const targetY = h * 0.8 - 60;
+      const targetX = isMobile ? w * 0.2 + 85 : w * 0.2;
       ctx.save();
       ctx.fillStyle = '#ffffff';
       for (let i = 0; i < PENTATONIC.length; i++) {
         const xNorm = (i + 0.5) / PENTATONIC.length;
-        const x = w * xNorm;
-        ctx.beginPath();
-        ctx.arc(x, targetY, 0.75, 0, Math.PI * 2);
-        ctx.fill();
+        if (isMobile) {
+          const y = h * (1.0 - xNorm);
+          ctx.beginPath();
+          ctx.arc(targetX, y, 0.75, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          const x = w * xNorm;
+          ctx.beginPath();
+          ctx.arc(x, targetY, 0.75, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       ctx.restore();
 
@@ -910,7 +1102,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         songTime.current += dt;
 
         // Select active song melody and duration
-        const activeSong = songIndexRef.current === 1
+        const activeSong = songIndexRef.current === 0
           ? { melody: ENTELECHY_MELODY, duration: 8000 }
           : { melody: DIHUA_MELODY, duration: 25000 };
 
@@ -930,13 +1122,22 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           const noteObj = activeSong.melody[nextNoteIndex.current];
           const freq = LYRE_FREQS[noteObj.note] || 440;
           const xNorm = getXNormFromFreq(freq);
-          const x = w * xNorm;
+          
+          let x, y;
+          if (isMobile) {
+            y = h * (1.0 - xNorm);
+            x = w; // Spawn on the right edge
+          } else {
+            x = w * xNorm;
+            y = 0; // Spawn on the top edge
+          }
+
           const hue = getHueFromFreq(freq);
 
           fallingNotes.current.push({
             id: Math.random() + nextNoteIndex.current,
             x,
-            y: 0,
+            y,
             targetY,
             freq,
             color: `hsla(${hue}, 95%, 65%, ALPHA)`,
@@ -953,33 +1154,49 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           const spawnTime = strikeTime - LOOKAHEAD_TIME;
           const progress = Math.min(1.0, Math.max(0.0, (songTime.current - spawnTime) / LOOKAHEAD_TIME));
 
-          r.y = targetY * progress;
+          if (isMobile) {
+            r.x = w - (w - targetX) * progress; // Move horizontally right-to-left
+          } else {
+            r.y = targetY * progress; // Fall vertically top-to-bottom
+          }
 
           if (progress >= 1.0 && !r.hasPlayed) {
             r.hasPlayed = true;
 
+            const strikeX = isMobile ? targetX : r.x;
+            const strikeY = isMobile ? r.y : targetY;
+
             // Trigger visual/physical shockwave and sound chime!
-            triggerShockwave(r.x, targetY, w, h);
-            playChime(r.x / w, 2.2, r.freq);
+            triggerShockwave(strikeX, strikeY, w, h);
+            
+            const chimePos = isMobile ? (1.0 - strikeY / h) : (strikeX / w);
+            playChime(chimePos, 2.2, r.freq);
 
             // Add visual ripple
-            addVisualRipple(r.x, targetY);
+            addVisualRipple(strikeX, strikeY);
 
             // Inject high-speed particle burst
             if (mode === 'hanabi') {
-              spawnHanabi(r.x, targetY, getHueFromFreq(r.freq));
+              spawnHanabi(strikeX, strikeY, getHueFromFreq(r.freq));
             } else {
-              const burstCount = mode === 'cosmic' ? 40 : mode === 'sands' ? 32 : 28;
+              const burstCount = mode === 'cosmic' ? 40 : mode === 'sands' ? 32 : 28; // biolume
               for (let j = 0; j < burstCount; j++) {
                 const angle = Math.random() * Math.PI * 2;
-                const pSpeed = Math.random() * 6.0 + 4.5; // Faster start, travels further
+                let pSpeed = Math.random() * 6.0 + 4.5; // Faster start, travels further
+                if (isMobile) {
+                  if (mode === 'cosmic') {
+                    pSpeed *= 0.3; // 70% reduction
+                  } else if (mode === 'biolume') {
+                    pSpeed *= 0.65; // 35% reduction
+                  }
+                }
                 particles.current.push({
-                  x: r.x,
-                  y: targetY,
+                  x: strikeX,
+                  y: strikeY,
                   vx: Math.cos(angle) * pSpeed,
                   vy: Math.sin(angle) * pSpeed,
                   life: 1.0, // Lifespan managed in ms in loop
-                  hue: getHueFromFreq(r.freq),
+                  hue: mode === 'biolume' ? Math.random() * 360 : getHueFromFreq(r.freq), // Rainbow spray for Biolume notes!
                   isBurst: true,
                 });
               }
@@ -992,8 +1209,13 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           ctx.lineWidth = 1.2;
           ctx.setLineDash([3, 3]);
           ctx.beginPath();
-          ctx.moveTo(r.x, r.y - 18);
-          ctx.lineTo(r.x, r.y - 4); // Stop just before the diamond head
+          if (isMobile) {
+            ctx.moveTo(r.x + 18, r.y);
+            ctx.lineTo(r.x + 4, r.y); // Trail comes from the right
+          } else {
+            ctx.moveTo(r.x, r.y - 18);
+            ctx.lineTo(r.x, r.y - 4); // Trail comes from the top
+          }
           ctx.stroke();
 
           // Glowing diamond head: 4px square (rotated 45 degrees, half-diagonal is 2.8px)
@@ -1015,225 +1237,202 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         fallingNotes.current = fallingNotes.current.filter((n) => !n.hasPlayed);
       }
 
-      // 7. Copy main canvas contents to offscreen canvas for liquid glass distortion
-      const offscreen = offscreenCanvasRef.current;
-      if (offscreen) {
-        const offscreenCtx = offscreen.getContext('2d');
-        if (offscreenCtx) {
-          offscreenCtx.drawImage(canvas, 0, 0);
-        }
-      }
+      // 7. Update and draw visual ripples (invisible gravitational lensing refraction with chromatic aberration)
+      if (ripples.current.length > 0) {
+        ctx.save();
+        ripples.current = ripples.current.filter((r) => {
+          r.elapsedTime += dt;
+          const progress = Math.min(1.0, r.elapsedTime / r.duration);
 
-      // 8. Update and draw visual ripples (invisible gravitational lensing refraction with chromatic aberration)
-      if (offscreen && ripples.current.length > 0) {
-        const offscreenCtx = offscreen.getContext('2d');
-        if (offscreenCtx) {
-          // Optimization: Get the full screen image data once per frame
-          const fullScreenImgData = offscreenCtx.getImageData(0, 0, w, h);
-          const srcData = fullScreenImgData.data;
+          // Cubic ease-out for expansion (fast impact, slow deceleration)
+          const ease = 1.0 - Math.pow(1.0 - progress, 3);
+          r.radius = 4 + ease * (r.maxRadius - 4);
+          
+          // Smooth linear decay for alpha
+          r.alpha = 1.0 - progress;
 
-          ctx.save();
-          ripples.current = ripples.current.filter((r) => {
-            r.elapsedTime += dt;
-            const progress = Math.min(1.0, r.elapsedTime / r.duration);
+          if (progress >= 1.0) return false;
 
-            // Cubic ease-out for expansion (fast impact, slow deceleration)
-            const ease = 1.0 - Math.pow(1.0 - progress, 3);
-            r.radius = 4 + ease * (r.maxRadius - 4);
-            
-            // Smooth linear decay for alpha
-            r.alpha = 1.0 - progress;
+          const R = r.radius;
+          const baseAlpha = r.alpha;
+          const cosA = Math.cos(r.angle);
+          const sinA = Math.sin(r.angle);
+          const stretch = r.stretch;
 
-            if (progress >= 1.0) return false;
+          // Bounding box for the local ripple patch (extended slightly to account for asymmetry)
+          const pad = 12;
+          const x0 = Math.max(0, Math.floor(r.x - R - pad));
+          const y0 = Math.max(0, Math.floor(r.y - R - pad));
+          const x1 = Math.min(w, Math.ceil(r.x + R + pad));
+          const y1 = Math.min(h, Math.ceil(r.y + R + pad));
+          const width = x1 - x0;
+          const height = y1 - y0;
 
-            const R = r.radius;
-            const baseAlpha = r.alpha;
-            const cosA = Math.cos(r.angle);
-            const sinA = Math.sin(r.angle);
-            const stretch = r.stretch;
+          if (width > 0 && height > 0) {
+            // Get current live canvas pixels for this bounding box
+            const dstImgData = ctx.getImageData(x0, y0, width, height);
+            const dstData = dstImgData.data;
 
-            // Bounding box for the local ripple patch (extended slightly to account for asymmetry)
-            const pad = 12;
-            const x0 = Math.max(0, Math.floor(r.x - R - pad));
-            const y0 = Math.max(0, Math.floor(r.y - R - pad));
-            const x1 = Math.min(w, Math.ceil(r.x + R + pad));
-            const y1 = Math.min(h, Math.ceil(r.y + R + pad));
-            const width = x1 - x0;
-            const height = y1 - y0;
+            // Make a local copy to use as the source buffer for this displacement
+            const localSrc = new Uint8ClampedArray(dstData);
 
-            if (width > 0 && height > 0) {
-              const dstImgData = ctx.getImageData(x0, y0, width, height);
-              const dstData = dstImgData.data;
+            // Pre-calculate constants to optimize math in the inner loops
+            const stretch_cosA = cosA * stretch;
+            const sinA_div_stretch = sinA / stretch;
 
-              // Pre-calculate constants to optimize math in the inner loops
-              const stretch_cosA = cosA * stretch;
-              const sinA_div_stretch = sinA / stretch;
+            // Apply pixel-level displacement
+            for (let y = 0; y < height; y++) {
+              const py = y0 + y;
+              const dy = py - r.y;
+              
+              const dy_sinA = dy * sinA;
+              const dy_cosA = dy * cosA;
 
-              // Start with a clean copy of the local destination segment from the screen-wide srcData
-              for (let y = 0; y < height; y++) {
-                const py = y0 + y;
-                const srcRowStart = (x0 + py * w) * 4;
-                const dstRowStart = y * width * 4;
-                const byteLength = width * 4;
+              // Start values for ex and ey at x = 0 (px = x0, dx = x0 - r.x)
+              const startDx = x0 - r.x;
+              let ex = (startDx * cosA - dy_sinA) * stretch;
+              let ey = (startDx * sinA + dy_cosA) / stretch;
+
+              for (let x = 0; x < width; x++) {
+                const px = x0 + x;
+                const dx = px - r.x;
                 
-                // Copy segment row by row from screen-wide srcData to dstData
-                dstData.set(srcData.subarray(srcRowStart, srcRowStart + byteLength), dstRowStart);
-              }
+                const distSq = ex * ex + ey * ey;
 
-              // Apply pixel-level displacement
-              for (let y = 0; y < height; y++) {
-                const py = y0 + y;
-                const dy = py - r.y;
-                
-                const dy_sinA = dy * sinA;
-                const dy_cosA = dy * cosA;
+                // Increment ex and ey for next iteration (saves multiplications)
+                ex += stretch_cosA;
+                ey += sinA_div_stretch;
 
-                // Start values for ex and ey at x = 0 (px = x0, dx = x0 - r.x)
-                const startDx = x0 - r.x;
-                let ex = (startDx * cosA - dy_sinA) * stretch;
-                let ey = (startDx * sinA + dy_cosA) / stretch;
+                // Check if the pixel is inside the ripple bounding region
+                if (distSq < R * R) {
+                  const phi = fastAtan2(dy, dx);
+                  // Circumferential waviness: 5-fold and 3-fold harmonic modulation for natural asymmetry
+                  const waveWarp = 1.0 + 0.08 * Math.sin(phi * 5 + progress * 7.0) + 0.04 * Math.cos(phi * 3 - progress * 4.0);
+                  const dist = Math.sqrt(distSq) * waveWarp;
 
-                for (let x = 0; x < width; x++) {
-                  const px = x0 + x;
-                  const dx = px - r.x;
-                  
-                  const distSq = ex * ex + ey * ey;
+                  if (dist < R) {
+                    const realDist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0 && realDist > 0) {
+                      const t = dist / R;
+                      
+                      // Concentric ripple wave effect: multiple waves radiating out (with a secondary rhetoric wave layer)
+                      const wave = Math.sin(dist * 0.15 - progress * 12.0) + 0.35 * Math.sin(dist * 0.30 - progress * 24.0);
+                      // Envelope that is 0 at center (t=0) and outer edge (t=1), decaying towards edge
+                      const envelope = Math.sin(t * Math.PI) * Math.pow(1.0 - t, 0.5);
+                      
+                      const strength = 0.48 * baseAlpha;
+                      // Displacement scales with distance (amplified for prominence)
+                      const displace = wave * envelope * strength * (dist * 0.50 + 12.0);
 
-                  // Increment ex and ey for next iteration (saves multiplications)
-                  ex += stretch_cosA;
-                  ey += sinA_div_stretch;
+                      // Only compute bilinear interpolation if displacement is visually significant
+                      if (Math.abs(displace) >= 0.1) {
+                        // Chromatic aberration offsets: Red refracts most, Green normal, Blue least
+                        const distR = realDist - displace * 1.15;
+                        const distG = realDist - displace;
+                        const distB = realDist - displace * 0.85;
 
-                  // Check if the pixel is inside the ripple bounding region
-                  if (distSq < R * R) {
-                    const phi = fastAtan2(dy, dx);
-                    // Circumferential waviness: 5-fold and 3-fold harmonic modulation for natural asymmetry
-                    const waveWarp = 1.0 + 0.08 * Math.sin(phi * 5 + progress * 7.0) + 0.04 * Math.cos(phi * 3 - progress * 4.0);
-                    const dist = Math.sqrt(distSq) * waveWarp;
+                        const rx = r.x + (dx / realDist) * distR;
+                        const ry = r.y + (dy / realDist) * distR;
 
-                    if (dist < R) {
-                      const realDist = Math.sqrt(dx * dx + dy * dy);
-                      if (dist > 0 && realDist > 0) {
-                        const t = dist / R;
-                        
-                        // Concentric ripple wave effect: multiple waves radiating out (with a secondary rhetoric wave layer)
-                        const wave = Math.sin(dist * 0.15 - progress * 12.0) + 0.35 * Math.sin(dist * 0.30 - progress * 24.0);
-                        // Envelope that is 0 at center (t=0) and outer edge (t=1), decaying towards edge
-                        const envelope = Math.sin(t * Math.PI) * Math.pow(1.0 - t, 0.5);
-                        
-                        const strength = 0.48 * baseAlpha;
-                        // Displacement scales with distance (amplified for prominence)
-                        const displace = wave * envelope * strength * (dist * 0.50 + 12.0);
+                        const gx = r.x + (dx / realDist) * distG;
+                        const gy = r.y + (dy / realDist) * distG;
 
-                        // Only compute bilinear interpolation if displacement is visually significant
-                        if (Math.abs(displace) >= 0.1) {
-                          // Chromatic aberration offsets: Red refracts most, Green normal, Blue least
-                          const distR = realDist - displace * 1.15;
-                          const distG = realDist - displace;
-                          const distB = realDist - displace * 0.85;
+                        const bx = r.x + (dx / realDist) * distB;
+                        const by = r.y + (dy / realDist) * distB;
 
-                          const rx = r.x + (dx / realDist) * distR;
-                          const ry = r.y + (dy / realDist) * distR;
+                        const idx = (x + y * width) * 4;
 
-                          const gx = r.x + (dx / realDist) * distG;
-                          const gy = r.y + (dy / realDist) * distG;
-
-                          const bx = r.x + (dx / realDist) * distB;
-                          const by = r.y + (dy / realDist) * distB;
-
-                          const idx = (x + y * width) * 4;
-
-                          // Inline Bilinear sampler directly from full screen srcData
-                          // Red Channel
-                          {
-                            const fx = Math.max(0, Math.min(w - 1, rx));
-                            const fy = Math.max(0, Math.min(h - 1, ry));
-                            const xf = Math.floor(fx);
-                            const yf = Math.floor(fy);
-                            const xc = xf < w - 1 ? xf + 1 : xf;
-                            const yc = yf < h - 1 ? yf + 1 : yf;
-                            const tx = fx - xf;
-                            const ty = fy - yf;
-                            
-                            const row0 = yf * w * 4;
-                            const row1 = yc * w * 4;
-                            const r00 = srcData[row0 + xf * 4];
-                            const r10 = srcData[row0 + xc * 4];
-                            const r01 = srcData[row1 + xf * 4];
-                            const r11 = srcData[row1 + xc * 4];
-                            
-                            const top = r00 + tx * (r10 - r00);
-                            const bottom = r01 + tx * (r11 - r01);
-                            dstData[idx] = top + ty * (bottom - top);
-                          }
-
-                          // Green Channel
-                          {
-                            const fx = Math.max(0, Math.min(w - 1, gx));
-                            const fy = Math.max(0, Math.min(h - 1, gy));
-                            const xf = Math.floor(fx);
-                            const yf = Math.floor(fy);
-                            const xc = xf < w - 1 ? xf + 1 : xf;
-                            const yc = yf < h - 1 ? yf + 1 : yf;
-                            const tx = fx - xf;
-                            const ty = fy - yf;
-                            
-                            const row0 = yf * w * 4;
-                            const row1 = yc * w * 4;
-                            const g00 = srcData[row0 + xf * 4 + 1];
-                            const g10 = srcData[row0 + xc * 4 + 1];
-                            const g01 = srcData[row1 + xf * 4 + 1];
-                            const g11 = srcData[row1 + xc * 4 + 1];
-                            
-                            const top = g00 + tx * (g10 - g00);
-                            const bottom = g01 + tx * (g11 - g01);
-                            dstData[idx + 1] = top + ty * (bottom - top);
-                          }
-
-                          // Blue Channel
-                          {
-                            const fx = Math.max(0, Math.min(w - 1, bx));
-                            const fy = Math.max(0, Math.min(h - 1, by));
-                            const xf = Math.floor(fx);
-                            const yf = Math.floor(fy);
-                            const xc = xf < w - 1 ? xf + 1 : xf;
-                            const yc = yf < h - 1 ? yf + 1 : yf;
-                            const tx = fx - xf;
-                            const ty = fy - yf;
-                            
-                            const row0 = yf * w * 4;
-                            const row1 = yc * w * 4;
-                            const b00 = srcData[row0 + xf * 4 + 2];
-                            const b10 = srcData[row0 + xc * 4 + 2];
-                            const b01 = srcData[row1 + xf * 4 + 2];
-                            const b11 = srcData[row1 + xc * 4 + 2];
-                            
-                            const top = b00 + tx * (b10 - b00);
-                            const bottom = b01 + tx * (b11 - b01);
-                            dstData[idx + 2] = top + ty * (bottom - top);
-                          }
-
-                          dstData[idx + 3] = 255;
+                        // Inline Bilinear sampler directly from local source buffer
+                        // Red Channel
+                        {
+                          const fx = Math.max(0, Math.min(width - 1, rx - x0));
+                          const fy = Math.max(0, Math.min(height - 1, ry - y0));
+                          const xf = Math.floor(fx);
+                          const yf = Math.floor(fy);
+                          const xc = xf < width - 1 ? xf + 1 : xf;
+                          const yc = yf < height - 1 ? yf + 1 : yf;
+                          const tx = fx - xf;
+                          const ty = fy - yf;
+                          
+                          const row0 = yf * width * 4;
+                          const row1 = yc * width * 4;
+                          const r00 = localSrc[row0 + xf * 4];
+                          const r10 = localSrc[row0 + xc * 4];
+                          const r01 = localSrc[row1 + xf * 4];
+                          const r11 = localSrc[row1 + xc * 4];
+                          
+                          const top = r00 + tx * (r10 - r00);
+                          const bottom = r01 + tx * (r11 - r01);
+                          dstData[idx] = top + ty * (bottom - top);
                         }
+
+                        // Green Channel
+                        {
+                          const fx = Math.max(0, Math.min(width - 1, gx - x0));
+                          const fy = Math.max(0, Math.min(height - 1, gy - y0));
+                          const xf = Math.floor(fx);
+                          const yf = Math.floor(fy);
+                          const xc = xf < width - 1 ? xf + 1 : xf;
+                          const yc = yf < height - 1 ? yf + 1 : yf;
+                          const tx = fx - xf;
+                          const ty = fy - yf;
+                          
+                          const row0 = yf * width * 4;
+                          const row1 = yc * width * 4;
+                          const g00 = localSrc[row0 + xf * 4 + 1];
+                          const g10 = localSrc[row0 + xc * 4 + 1];
+                          const g01 = localSrc[row1 + xf * 4 + 1];
+                          const g11 = localSrc[row1 + xc * 4 + 1];
+                          
+                          const top = g00 + tx * (g10 - g00);
+                          const bottom = g01 + tx * (g11 - g01);
+                          dstData[idx + 1] = top + ty * (bottom - top);
+                        }
+
+                        // Blue Channel
+                        {
+                          const fx = Math.max(0, Math.min(width - 1, bx - x0));
+                          const fy = Math.max(0, Math.min(height - 1, by - y0));
+                          const xf = Math.floor(fx);
+                          const yf = Math.floor(fy);
+                          const xc = xf < width - 1 ? xf + 1 : xf;
+                          const yc = yf < height - 1 ? yf + 1 : yf;
+                          const tx = fx - xf;
+                          const ty = fy - yf;
+                          
+                          const row0 = yf * width * 4;
+                          const row1 = yc * width * 4;
+                          const b00 = localSrc[row0 + xf * 4 + 2];
+                          const b10 = localSrc[row0 + xc * 4 + 2];
+                          const b01 = localSrc[row1 + xf * 4 + 2];
+                          const b11 = localSrc[row1 + xc * 4 + 2];
+                          
+                          const top = b00 + tx * (b10 - b00);
+                          const bottom = b01 + tx * (b11 - b01);
+                          dstData[idx + 2] = top + ty * (bottom - top);
+                        }
+
+                        dstData[idx + 3] = 255;
                       }
                     }
                   }
                 }
               }
-
-              ctx.putImageData(dstImgData, x0, y0);
             }
 
-            // 2. Ultra-faint lens edge shadow (achromatic defining rim)
-            ctx.strokeStyle = `rgba(255, 255, 255, ${(baseAlpha * 0.05).toFixed(3)})`;
-            ctx.lineWidth = 1.0;
-            ctx.beginPath();
-            ctx.arc(r.x, r.y, R, 0, Math.PI * 2);
-            ctx.stroke();
+            ctx.putImageData(dstImgData, x0, y0);
+          }
 
-            return true;
-          });
-          ctx.restore();
-        }
+          // 2. Ultra-faint lens edge shadow (achromatic defining rim)
+          ctx.strokeStyle = `rgba(255, 255, 255, ${(baseAlpha * 0.05).toFixed(3)})`;
+          ctx.lineWidth = 1.0;
+          ctx.beginPath();
+          ctx.arc(r.x, r.y, R, 0, Math.PI * 2);
+          ctx.stroke();
+
+          return true;
+        });
+        ctx.restore();
       }
 
       animId = requestAnimationFrame(drawLoop);
@@ -1247,7 +1446,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       window.removeEventListener('resize', resizeCanvas);
       cancelAnimationFrame(animId);
     };
-  }, [mode]);
+  }, [mode, isMobile]);
 
   // Autoplay Melody state resets
   useEffect(() => {
@@ -1286,11 +1485,14 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         audioCtxRef.current.suspend();
       }
     }
-  }, [audioEnabled]);
+  }, [audioEnabled, isMobile]);
 
   // Handle pointer interactions
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     initAudio();
+    if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -1298,13 +1500,13 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
     lastMouse.current = { x, y, active: true };
 
     // Trigger visual/physical shockwave and sound chime
-    const xNorm = x / rect.width;
+    const norm = isMobile ? (1.0 - y / rect.height) : (x / rect.width);
     triggerShockwave(x, y, rect.width, rect.height);
 
-    const noteIdx = Math.floor(xNorm * PENTATONIC.length);
+    const noteIdx = Math.floor(norm * PENTATONIC.length);
     const freq = PENTATONIC[Math.min(noteIdx, PENTATONIC.length - 1)];
     
-    playChime(xNorm, 1.5);
+    playChime(norm, 1.5);
 
     // Add visual ripple
     addVisualRipple(x, y);
@@ -1316,17 +1518,24 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
     if (mode === 'hanabi') {
       spawnHanabi(x, y, hue);
     } else {
-      const count = mode === 'cosmic' ? 30 : mode === 'sands' ? 24 : 20;
+      const count = mode === 'cosmic' ? 30 : mode === 'sands' ? 24 : 20; // biolume
       for (let j = 0; j < count; j++) {
         const angle = Math.random() * Math.PI * 2;
-        const pSpeed = Math.random() * 6.0 + 4.5; // Faster start, travels further
+        let pSpeed = Math.random() * 6.0 + 4.5; // Faster start, travels further
+        if (isMobile) {
+          if (mode === 'cosmic') {
+            pSpeed *= 0.3; // 70% reduction
+          } else if (mode === 'biolume') {
+            pSpeed *= 0.65; // 35% reduction
+          }
+        }
         particles.current.push({
           x,
           y,
           vx: Math.cos(angle) * pSpeed,
           vy: Math.sin(angle) * pSpeed,
           life: 1.0,
-          hue,
+          hue: mode === 'biolume' ? Math.random() * 360 : hue, // Rainbow spray for Biolume clicks!
           isBurst: true,
         });
       }
@@ -1364,8 +1573,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
       // Emit soft chimes on drag
       if (Math.random() < 0.12 && audioCtxRef.current) {
-        const xNorm = x / rect.width;
-        playChime(xNorm, Math.min(1.0, dist * 0.08));
+        const norm = isMobile ? (1.0 - y / rect.height) : (x / rect.width);
+        playChime(norm, Math.min(1.0, dist * 0.08));
       }
     }
 

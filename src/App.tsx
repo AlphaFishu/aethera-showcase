@@ -3,9 +3,26 @@ import { FluidSandbox } from './components/FluidSandbox';
 import { Sparkles, Activity, Volume2, VolumeX, Play, Pause, Music, SkipForward } from 'lucide-react';
 import './App.css';
 
-const SONG_NAMES = ["DIHUA MARSH", "ENTELECHY"];
+const SONG_NAMES = ["ENTELECHY", "DIHUA MARSH"];
+
+// Custom hook to listen to window resizing
+function useWindowSize() {
+  const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setSize({ width: window.innerWidth, height: window.innerHeight });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return size;
+}
 
 function App() {
+  const { width } = useWindowSize();
+  const isMobile = width < 768;
   const [mode, setMode] = useState<'cosmic' | 'biolume' | 'hanabi' | 'sands'>('cosmic');
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
@@ -106,6 +123,7 @@ function App() {
       <FluidSandbox
         mode={mode}
         audioEnabled={audioEnabled}
+        isMobile={isMobile}
         onAudioStateChange={setAudioEnabled}
         onSetAnalyser={setAnalyser}
         isPlayingMelody={isPlayingMelody}
@@ -148,24 +166,26 @@ function App() {
           <div>
             <h1
               style={{
-                fontSize: '14px',
+                fontSize: isMobile ? '16px' : '14px',
                 fontWeight: 900,
                 color: '#fff',
                 display: 'flex',
+                flexDirection: 'row',
                 alignItems: 'center',
                 gap: '8px',
+                lineHeight: 1.1,
               }}
             >
               AETHERA KINETIC
-              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', opacity: 0.6 }}>
-                // by Nino AlphaFish
+              <span style={{ fontSize: isMobile ? '11px' : '13px', fontWeight: 500, color: 'var(--text-secondary)', opacity: 0.6 }}>
+                // Nino
               </span>
             </h1>
           </div>
         </div>
 
         {/* Dynamic audio node indicator & Autoplay controller */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '6px' : '12px' }}>
           <button
             type="button"
             className={`hud-btn ${isPlayingMelody ? 'active' : ''}`}
@@ -177,9 +197,9 @@ function App() {
               pointerEvents: 'auto',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: isMobile ? '4px' : '8px',
               height: '32px',
-              padding: '0 14px',
+              padding: isMobile ? '0 10px' : '0 14px',
             }}
           >
             {isPlayingMelody ? (
@@ -188,7 +208,11 @@ function App() {
               <Play size={10} fill="currentColor" />
             )}
             <Music size={10} />
-            <span>{isPlayingMelody ? `PLAYING ${SONG_NAMES[songIndex]}` : 'AUTOPLAY MELODY'}</span>
+            <span>
+              {isMobile 
+                ? (isPlayingMelody ? SONG_NAMES[songIndex].split(' ')[0] : 'PLAY') 
+                : (isPlayingMelody ? `PLAYING ${SONG_NAMES[songIndex]}` : 'AUTOPLAY MELODY')}
+            </span>
           </button>
 
           {isPlayingMelody && (
@@ -202,14 +226,14 @@ function App() {
                 pointerEvents: 'auto',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: isMobile ? '0' : '8px',
                 height: '32px',
-                padding: '0 12px',
+                padding: isMobile ? '0 10px' : '0 12px',
                 background: 'rgba(255, 255, 255, 0.05)',
                 borderColor: 'rgba(255, 255, 255, 0.1)',
               }}
             >
-              <span>NEXT SONG</span>
+              {!isMobile && <span style={{ marginRight: '4px' }}>NEXT SONG</span>}
               <SkipForward size={11} fill="currentColor" />
             </button>
           )}
@@ -224,10 +248,10 @@ function App() {
               pointerEvents: 'auto',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: isMobile ? '0' : '8px',
               height: '32px',
-              padding: '0 12px',
-              fontSize: '10px',
+              padding: isMobile ? '0 10px' : '0 12px',
+              fontSize: isMobile ? '12px' : '10px',
               fontWeight: 700,
               color: audioEnabled ? '#fff' : 'var(--text-secondary)',
               cursor: 'pointer',
@@ -241,8 +265,8 @@ function App() {
             ) : (
               <VolumeX size={12} style={{ color: 'var(--text-secondary)' }} />
             )}
-            <span>{audioEnabled ? 'SOUND ON' : 'SOUND OFF'}</span>
-            {audioEnabled && <span className="glow-indicator" />}
+            {!isMobile && <span>{audioEnabled ? 'SOUND ON' : 'SOUND OFF'}</span>}
+            {audioEnabled && <span className="glow-indicator" style={{ marginLeft: isMobile ? '0' : '4px' }} />}
           </button>
         </div>
       </header>
@@ -263,7 +287,7 @@ function App() {
       >
         {/* Left Side: Sandbox Guidelines */}
         <div
-          className="hud-card"
+          className="hud-card desktop-only"
           style={{
             padding: '16px 20px',
             width: '280px',
@@ -288,9 +312,9 @@ function App() {
         <div
           className="hud-card"
           style={{
-            padding: '8px',
+            padding: isMobile ? '6px' : '8px',
             display: 'flex',
-            gap: '6px',
+            gap: isMobile ? '4px' : '6px',
             pointerEvents: 'auto',
           }}
         >
@@ -299,34 +323,34 @@ function App() {
             className={`hud-btn ${mode === 'cosmic' ? 'active' : ''}`}
             onClick={() => setMode('cosmic')}
           >
-            Cosmic Dust
+            {isMobile ? 'Cosmic' : 'Cosmic Dust'}
           </button>
           <button
             type="button"
             className={`hud-btn ${mode === 'biolume' ? 'active' : ''}`}
             onClick={() => setMode('biolume')}
           >
-            Biolume Trails
+            {isMobile ? 'Biolume' : 'Biolume Trails'}
           </button>
           <button
             type="button"
             className={`hud-btn ${mode === 'hanabi' ? 'active' : ''}`}
             onClick={() => setMode('hanabi')}
           >
-            Hanabi Theme
+            {isMobile ? 'Hanabi' : 'Hanabi Theme'}
           </button>
           <button
             type="button"
             className={`hud-btn ${mode === 'sands' ? 'active' : ''}`}
             onClick={() => setMode('sands')}
           >
-            Flowing Sands
+            {isMobile ? 'Sands' : 'Flowing Sands'}
           </button>
         </div>
 
         {/* Right Side: Oscilloscope Waveform Panel */}
         <div
-          className="hud-card"
+          className="hud-card desktop-only"
           style={{
             padding: '12px 16px',
             display: 'flex',

@@ -132,3 +132,62 @@ h1, h2, h3 {
   background: var(--accent-glow);
   color: #fff;
 }
+
+/* Responsive Helper Utilities */
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* Target the header HUD element specifically on mobile */
+  header.hud-card {
+    top: 10px !important;
+    left: 10px !important;
+    width: calc(100vw - 20px) !important;
+    padding: 10px 14px !important;
+    height: auto !important;
+    min-height: 52px !important;
+    display: flex !important;
+    flex-flow: row wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px 12px !important;
+  }
+
+  .header-controls {
+    flex-grow: 1 !important;
+    justify-content: flex-end !important;
+  }
+
+  /* Target the footer HUD wrapper specifically on mobile */
+  footer {
+    bottom: 10px !important;
+    left: 10px !important;
+    width: calc(100vw - 20px) !important;
+    justify-content: center !important; /* Center the style switcher on mobile */
+  }
+
+  .hud-btn {
+    padding: 6px 10px !important;
+    font-size: 10px !important;
+    border-radius: 8px !important;
+    gap: 4px !important;
+  }
+
+  /* Mobile style switcher horizontal scroll */
+  .style-switcher {
+    max-width: calc(100vw - 20px) !important;
+    overflow-x: auto !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none; /* Hide scrollbars (Firefox) */
+  }
+  .style-switcher::-webkit-scrollbar {
+    display: none; /* Hide scrollbars (Safari/Chrome) */
+  }
+  .style-switcher .hud-btn {
+    flex-shrink: 0 !important;
+  }
+}
