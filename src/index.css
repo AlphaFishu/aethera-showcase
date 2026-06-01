@@ -226,13 +226,6 @@ h1, h2, h3 {
     align-items: center !important;
     justify-content: space-between !important;
     gap: 8px 12px !important;
-    
-    /* Restore native hardware-accelerated CSS glassmorphism on mobile viewports */
-    background: var(--bg-hud) !important;
-    backdrop-filter: blur(24px) !important;
-    -webkit-backdrop-filter: blur(24px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
   }
 
   .header-controls {
@@ -264,14 +257,6 @@ h1, h2, h3 {
     flex-wrap: nowrap !important;
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none; /* Hide scrollbars (Firefox) */
-    
-    /* Restore native hardware-accelerated CSS glassmorphism on mobile viewports */
-    background: var(--bg-hud) !important;
-    backdrop-filter: blur(24px) !important;
-    -webkit-backdrop-filter: blur(24px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
-    border-radius: 16px !important;
     padding: 6px !important;
   }
   .style-switcher::-webkit-scrollbar {

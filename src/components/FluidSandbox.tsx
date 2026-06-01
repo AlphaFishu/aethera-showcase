@@ -345,7 +345,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   const spawnHanabi = (x: number, y: number, baseHue: number) => {
     const style = Math.floor(Math.random() * 6); // 6 different Japanese firework shell styles
     const rangeScale = 0.75; // 25% reduction in explosion range (particle velocity)
-    const countScale = isMobile ? 0.80 : 1.0; // 20% reduction in particle amount on mobile
+    const countScale = isMobile ? 0.50 : 1.0; // 50% reduction in particle amount on mobile
 
     if (style === 0) {
       // Style 0: Imperial Peony (Double-Ring with golden core) - Ultra dense
@@ -936,23 +936,23 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       // Soft scaling: use the square root of the area ratio so it scales down more gently for desktop
       const scale = Math.max(0.4, Math.sqrt(areaRatio));
 
-      let baseCount = activeMode === 'cosmic' ? 7200 : activeMode === 'biolume' ? 3000 : activeMode === 'hanabi' ? 0 : 5400; // Increased base counts by 20%
+      let baseCount = activeMode === 'cosmic' ? 6000 : activeMode === 'biolume' ? 2500 : activeMode === 'hanabi' ? 0 : 4500;
       let count = Math.round(baseCount * scale);
 
       if (isMobile) {
         // Use linear area ratio for mobile to scale down to lightweight levels
         const mobileScale = Math.max(0.15, areaRatio);
-        count = Math.round(baseCount * mobileScale * 0.84); // Increased mobile multiplier by 20% (0.70 * 1.20)
+        count = Math.round(baseCount * mobileScale * 0.70);
         
-        // Ensure a healthy minimum so it remains visually rich and interactive but extremely performant (increased by 20%)
-        if (activeMode === 'cosmic') count = Math.max(720, count);
-        else if (activeMode === 'biolume') count = Math.max(360, count);
-        else if (activeMode === 'sands') count = Math.max(600, count);
+        // Ensure a healthy minimum so it remains visually rich and interactive but extremely performant
+        if (activeMode === 'cosmic') count = Math.max(600, count);
+        else if (activeMode === 'biolume') count = Math.max(300, count);
+        else if (activeMode === 'sands') count = Math.max(500, count);
       } else {
-        // On desktop, ensure a minimum count as well (increased by 20%)
-        if (activeMode === 'cosmic') count = Math.max(4800, count);
-        else if (activeMode === 'biolume') count = Math.max(2160, count);
-        else if (activeMode === 'sands') count = Math.max(3600, count);
+        // On desktop, ensure a minimum count as well
+        if (activeMode === 'cosmic') count = Math.max(4000, count);
+        else if (activeMode === 'biolume') count = Math.max(1800, count);
+        else if (activeMode === 'sands') count = Math.max(3000, count);
       }
 
       particleCount.current = count;
@@ -1285,12 +1285,12 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
           const currentHue = (p.hue + (1.0 - p.life) * 115) % 360;
 
-          // Draw fine glittering motion trail
-          if (speed > 0.6) {
+          // Draw fine glittering motion trail (disabled on mobile to optimize performance)
+          if (!isMobile && speed > 0.6) {
             drawCtx.strokeStyle = p.spin === -999 
               ? `rgba(255, 180, 50, ${alpha * 0.38})` // Gold trail
               : `hsla(${currentHue}, 95%, 65%, ${alpha * 0.35})`;
-            drawCtx.lineWidth = isMobile ? 0.35 : 0.45; // Finer trail lines on mobile
+            drawCtx.lineWidth = 0.45;
             drawCtx.beginPath();
             drawCtx.moveTo(p.x - p.vx * 2.2, p.y - p.vy * 2.2); // Longer trail line
             drawCtx.lineTo(p.x, p.y);
@@ -1299,8 +1299,6 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
           // Draw fine-grain combustion spark core
           const radius = (0.35 + p.life * 0.65) * (isMobile ? 1.35 : 1.0); // 35% larger core on mobile
-          drawCtx.beginPath();
-          drawCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
           
           if (p.life > 0.82) {
             drawCtx.fillStyle = '#ffffff'; // White-hot combustion
@@ -1309,7 +1307,15 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           } else {
             drawCtx.fillStyle = `hsla(${currentHue}, 95%, 65%, ${alpha})`; // Saturated color shift
           }
-          drawCtx.fill();
+
+          if (isMobile) {
+            // Draw spark core as flat hardware-accelerated rect square on mobile viewports to bypass vector arc path overhead
+            drawCtx.fillRect(p.x - radius, p.y - radius, radius * 2, radius * 2);
+          } else {
+            drawCtx.beginPath();
+            drawCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+            drawCtx.fill();
+          }
         } else if (activeMode === 'sands') {
           // Flowing Sands Mode: ice-white and pale-cyan blizzard sand grains (smaller on mobile)
           const alpha = Math.min(0.85, 0.35 + speed * 0.15);
@@ -1776,7 +1782,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
 
       // Draw Top Menu Bar Glass Plate (using exact same effect as bottom bar)
-      if (headerRectRef.current && !isMobile) {
+      if (headerRectRef.current) {
         const rect = headerRectRef.current;
         const rectX = Math.round(rect.left);
         const rectY = Math.round(rect.top);
@@ -1787,17 +1793,20 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         ctx.save();
         
         // Clip and render GPU-accelerated frosted glass backdrop blur for the header container plate
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
-        ctx.clip();
-        
-        if (offscreen) {
-          ctx.filter = 'blur(16px)';
-          ctx.drawImage(offscreen, 0, 0, w, h);
-          ctx.filter = 'none';
+        // Bypass only the expensive blur copy on mobile viewports to preserve high framerates
+        if (!isMobile) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+          ctx.clip();
+          
+          if (offscreen) {
+            ctx.filter = 'blur(16px)';
+            ctx.drawImage(offscreen, 0, 0, w, h);
+            ctx.filter = 'none';
+          }
+          ctx.restore();
         }
-        ctx.restore();
 
         // Soft dark shadow under header plate
         ctx.save();
@@ -1837,7 +1846,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         ctx.restore();
       }
 
-      if (dockRectRef.current && !isMobile) {
+      if (dockRectRef.current) {
         const rect = dockRectRef.current;
         const rectX = Math.round(rect.left);
         const rectY = Math.round(rect.top);
@@ -1848,17 +1857,20 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         ctx.save();
         
         // Clip and render GPU-accelerated frosted glass backdrop blur for the dock container plate
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
-        ctx.clip();
-        
-        if (offscreen) {
-          ctx.filter = 'blur(16px)';
-          ctx.drawImage(offscreen, 0, 0, w, h);
-          ctx.filter = 'none';
+        // Bypass only the expensive blur copy on mobile viewports to preserve high framerates
+        if (!isMobile) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+          ctx.clip();
+          
+          if (offscreen) {
+            ctx.filter = 'blur(16px)';
+            ctx.drawImage(offscreen, 0, 0, w, h);
+            ctx.filter = 'none';
+          }
+          ctx.restore();
         }
-        ctx.restore();
 
         // Soft dark shadow under dock plate
         ctx.save();
