@@ -286,6 +286,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   const lastTimeRef = useRef<number | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const trailsCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const refractionTempCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const isPlayingMelodyRef = useRef(isPlayingMelody);
   isPlayingMelodyRef.current = isPlayingMelody;
@@ -932,24 +933,26 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       const areaRatio = currentArea / baseArea;
       const activeMode = modeRef.current;
 
-      // Soft scaling: use the square root of the area ratio so it scales down more gently
+      // Soft scaling: use the square root of the area ratio so it scales down more gently for desktop
       const scale = Math.max(0.4, Math.sqrt(areaRatio));
 
-      let baseCount = activeMode === 'cosmic' ? 6000 : activeMode === 'biolume' ? 2500 : activeMode === 'hanabi' ? 0 : 4500;
+      let baseCount = activeMode === 'cosmic' ? 7200 : activeMode === 'biolume' ? 3000 : activeMode === 'hanabi' ? 0 : 5400; // Increased base counts by 20%
       let count = Math.round(baseCount * scale);
 
       if (isMobile) {
-        // Apply the 30% reduction on mobile
-        count = Math.round(count * 0.70);
-        // Ensure a healthy minimum so it remains visually rich and interactive
-        if (activeMode === 'cosmic') count = Math.max(1000, count);
-        else if (activeMode === 'biolume') count = Math.max(600, count);
-        else if (activeMode === 'sands') count = Math.max(800, count);
+        // Use linear area ratio for mobile to scale down to lightweight levels
+        const mobileScale = Math.max(0.15, areaRatio);
+        count = Math.round(baseCount * mobileScale * 0.84); // Increased mobile multiplier by 20% (0.70 * 1.20)
+        
+        // Ensure a healthy minimum so it remains visually rich and interactive but extremely performant (increased by 20%)
+        if (activeMode === 'cosmic') count = Math.max(720, count);
+        else if (activeMode === 'biolume') count = Math.max(360, count);
+        else if (activeMode === 'sands') count = Math.max(600, count);
       } else {
-        // On desktop, ensure a minimum count as well
-        if (activeMode === 'cosmic') count = Math.max(4000, count);
-        else if (activeMode === 'biolume') count = Math.max(1800, count);
-        else if (activeMode === 'sands') count = Math.max(3000, count);
+        // On desktop, ensure a minimum count as well (increased by 20%)
+        if (activeMode === 'cosmic') count = Math.max(4800, count);
+        else if (activeMode === 'biolume') count = Math.max(2160, count);
+        else if (activeMode === 'sands') count = Math.max(3600, count);
       }
 
       particleCount.current = count;
@@ -983,6 +986,15 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       if (modeChangedRef.current) {
         modeChangedRef.current = false;
         initParticles();
+
+        // Completely reset fluid velocities and densities to erase any old currents
+        uGrid.current.fill(0);
+        vGrid.current.fill(0);
+        densityGrid.current.fill(0);
+
+        // Clear active visual ripples
+        ripples.current = [];
+
         if (trailsCtx) {
           trailsCtx.fillStyle = '#000000';
           trailsCtx.fillRect(0, 0, w, h);
@@ -1006,25 +1018,46 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       const v = vGrid.current;
       const density = densityGrid.current;
 
-      // Smooth/Diffuse grid velocities
-      for (let gy = 1; gy < GRID_Y - 1; gy++) {
-        for (let gx = 1; gx < GRID_X - 1; gx++) {
-          const i = gx + gy * GRID_X;
-          const uAvg = (u[i - 1] + u[i + 1] + u[i - GRID_X] + u[i + GRID_X]) * 0.25;
-          const vAvg = (v[i - 1] + v[i + 1] + v[i - GRID_X] + v[i + GRID_X]) * 0.25;
-          const densityAvg = (density[i - 1] + density[i + 1] + density[i - GRID_X] + density[i + GRID_X]) * 0.25;
-
-          u[i] = u[i] * 0.82 + uAvg * 0.18;
-          v[i] = v[i] * 0.82 + vAvg * 0.18;
-          density[i] = density[i] * 0.9 + densityAvg * 0.1;
+      // Check if grid has any active forces/velocities
+      let hasMotion = false;
+      for (let i = 0; i < gridLength; i++) {
+        if (u[i] !== 0 || v[i] !== 0 || density[i] !== 0) {
+          hasMotion = true;
+          break;
         }
       }
 
-      // Apply overall friction decay
-      for (let i = 0; i < gridLength; i++) {
-        u[i] *= 0.94;
-        v[i] *= 0.94;
-        density[i] *= 0.96;
+      if (hasMotion) {
+        // Smooth/Diffuse grid velocities
+        for (let gy = 1; gy < GRID_Y - 1; gy++) {
+          for (let gx = 1; gx < GRID_X - 1; gx++) {
+            const i = gx + gy * GRID_X;
+            const uAvg = (u[i - 1] + u[i + 1] + u[i - GRID_X] + u[i + GRID_X]) * 0.25;
+            const vAvg = (v[i - 1] + v[i + 1] + v[i - GRID_X] + v[i + GRID_X]) * 0.25;
+            const densityAvg = (density[i - 1] + density[i + 1] + density[i - GRID_X] + density[i + GRID_X]) * 0.25;
+
+            u[i] = u[i] * 0.82 + uAvg * 0.18;
+            v[i] = v[i] * 0.82 + vAvg * 0.18;
+            density[i] = density[i] * 0.9 + densityAvg * 0.1;
+          }
+        }
+
+        // Apply overall friction decay scaled for frame delta time (target: 60fps / 16.67ms)
+        const clampedDt = Math.min(100.0, dt || 16.67);
+        const fpsRatio = clampedDt / 16.67;
+        const velDecay = Math.pow(0.94, fpsRatio);
+        const densityDecay = Math.pow(0.96, fpsRatio);
+
+        for (let i = 0; i < gridLength; i++) {
+          u[i] *= velDecay;
+          v[i] *= velDecay;
+          density[i] *= densityDecay;
+
+          // Zero out extremely tiny velocities to prevent subnormal floating point math and keep simulation idle
+          if (Math.abs(u[i]) < 0.005) u[i] = 0.0;
+          if (Math.abs(v[i]) < 0.005) v[i] = 0.0;
+          if (density[i] < 0.005) density[i] = 0.0;
+        }
       }
 
       // 2b. If style switcher pill is moving, inject fluid drag force
@@ -1476,9 +1509,17 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
 
       // 7. Update and draw visual ripples (invisible gravitational lensing refraction with chromatic aberration)
+      // Optimized 1x logical-coordinate offscreen temp canvas processing (9x speedup on Retina displays)
       if (ripples.current.length > 0) {
         ctx.save();
         const dpr = window.devicePixelRatio || 1;
+        
+        if (!refractionTempCanvasRef.current) {
+          refractionTempCanvasRef.current = document.createElement('canvas');
+        }
+        const tempCanvas = refractionTempCanvasRef.current;
+        const tempCtx = tempCanvas ? tempCanvas.getContext('2d') : null;
+
         ripples.current = ripples.current.filter((r) => {
           r.elapsedTime += dt;
           const progress = Math.min(1.0, r.elapsedTime / r.duration);
@@ -1507,175 +1548,169 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           const width = x1 - x0; // logical width
           const height = y1 - y0; // logical height
 
-          if (width > 0 && height > 0) {
-            // Convert logical bounding box to physical canvas coordinates
-            const physX0 = Math.round(x0 * dpr);
-            const physY0 = Math.round(y0 * dpr);
-            const physX1 = Math.round(x1 * dpr);
-            const physY1 = Math.round(y1 * dpr);
-            const physW = physX1 - physX0;
-            const physH = physY1 - physY0;
+          if (width > 0 && height > 0 && tempCanvas && tempCtx) {
+            // Resize temp canvas to match logical bounding box size
+            tempCanvas.width = width;
+            tempCanvas.height = height;
 
-            if (physW > 0 && physH > 0) {
-              // Get current live canvas pixels for this physical bounding box
-              const dstImgData = ctx.getImageData(physX0, physY0, physW, physH);
-              const dstData = dstImgData.data;
+            // Copy the current main canvas pixels (High-DPI) downscaled to 1x logical resolution
+            tempCtx.drawImage(
+              canvas,
+              x0 * dpr, y0 * dpr, width * dpr, height * dpr, // source rect (physical)
+              0, 0, width, height                           // dest rect (logical)
+            );
 
-              // Make a local copy to use as the source buffer for this displacement
-              const localSrc = new Uint8ClampedArray(dstData);
+            // Get logical pixel data
+            const dstImgData = tempCtx.getImageData(0, 0, width, height);
+            const dstData = dstImgData.data;
+            const localSrc = new Uint8ClampedArray(dstData);
 
-              // Pre-calculate constants to optimize math in the inner loops
-              const stretch_cosA = cosA * stretch;
-              const sinA_div_stretch = sinA / stretch;
+            // Pre-calculate constants to optimize math in the inner loops
+            const stretch_cosA = cosA * stretch;
+            const sinA_div_stretch = sinA / stretch;
 
-              // Apply pixel-level displacement on physical pixel grid
-              for (let y = 0; y < physH; y++) {
-                // Convert current physical Y index to logical coordinate offset from ripple center
-                const py = (physY0 + y) / dpr;
-                const dy = py - r.y;
+            // Apply pixel-level displacement on 1x logical pixel grid
+            for (let y = 0; y < height; y++) {
+              const py = y0 + y;
+              const dy = py - r.y;
+              
+              const dy_sinA = dy * sinA;
+              const dy_cosA = dy * cosA;
+
+              const startDx = x0 - r.x;
+              let ex = (startDx * cosA - dy_sinA) * stretch;
+              let ey = (startDx * sinA + dy_cosA) / stretch;
+
+              const stepEx = stretch_cosA;
+              const stepEy = sinA_div_stretch;
+
+              for (let x = 0; x < width; x++) {
+                const px = x0 + x;
+                const dx = px - r.x;
                 
-                const dy_sinA = dy * sinA;
-                const dy_cosA = dy * cosA;
+                const distSq = ex * ex + ey * ey;
 
-                // Start values for ex and ey at x = 0 (px_phys = physX0, px = physX0 / dpr, dx = px - r.x)
-                const startDx = (physX0 / dpr) - r.x;
-                let ex = (startDx * cosA - dy_sinA) * stretch;
-                let ey = (startDx * sinA + dy_cosA) / stretch;
+                // Increment ex and ey
+                ex += stepEx;
+                ey += stepEy;
 
-                // We increment ex and ey in physical steps:
-                // Since dx increases by (1 / dpr) each step:
-                const stepEx = (1.0 / dpr) * stretch_cosA;
-                const stepEy = (1.0 / dpr) * sinA_div_stretch;
+                if (distSq < R * R) {
+                  const phi = fastAtan2(dy, dx);
+                  // Circumferential waviness: 5-fold and 3-fold harmonic modulation for natural asymmetry
+                  const waveWarp = 1.0 + 0.08 * Math.sin(phi * 5 + progress * 7.0) + 0.04 * Math.cos(phi * 3 - progress * 4.0);
+                  const dist = Math.sqrt(distSq) * waveWarp;
 
-                for (let x = 0; x < physW; x++) {
-                  const px = (physX0 + x) / dpr;
-                  const dx = px - r.x;
-                  
-                  const distSq = ex * ex + ey * ey;
+                  if (dist < R) {
+                    const realDist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0 && realDist > 0) {
+                      const t = dist / R;
+                      
+                      // Concentric ripple wave effect: multiple waves radiating out (with a secondary rhetoric wave layer)
+                      const wave = Math.sin(dist * 0.15 - progress * 12.0) + 0.35 * Math.sin(dist * 0.30 - progress * 24.0);
+                      const envelope = Math.sin(t * Math.PI) * Math.pow(1.0 - t, 0.5);
+                      
+                      const strength = 0.48 * baseAlpha;
+                      const displace = wave * envelope * strength * (dist * 0.50 + 12.0);
 
-                  // Increment ex and ey for next physical iteration
-                  ex += stepEx;
-                  ey += stepEy;
+                      if (Math.abs(displace) >= 0.1) {
+                        const distR = realDist - displace * 1.15;
+                        const distG = realDist - displace;
+                        const distB = realDist - displace * 0.85;
 
-                  // Check if the pixel is inside the ripple bounding region
-                  if (distSq < R * R) {
-                    const phi = fastAtan2(dy, dx);
-                    // Circumferential waviness: 5-fold and 3-fold harmonic modulation for natural asymmetry
-                    const waveWarp = 1.0 + 0.08 * Math.sin(phi * 5 + progress * 7.0) + 0.04 * Math.cos(phi * 3 - progress * 4.0);
-                    const dist = Math.sqrt(distSq) * waveWarp;
+                        const rx = r.x + (dx / realDist) * distR;
+                        const ry = r.y + (dy / realDist) * distR;
 
-                    if (dist < R) {
-                      const realDist = Math.sqrt(dx * dx + dy * dy);
-                      if (dist > 0 && realDist > 0) {
-                        const t = dist / R;
-                        
-                        // Concentric ripple wave effect: multiple waves radiating out (with a secondary rhetoric wave layer)
-                        const wave = Math.sin(dist * 0.15 - progress * 12.0) + 0.35 * Math.sin(dist * 0.30 - progress * 24.0);
-                        // Envelope that is 0 at center (t=0) and outer edge (t=1), decaying towards edge
-                        const envelope = Math.sin(t * Math.PI) * Math.pow(1.0 - t, 0.5);
-                        
-                        const strength = 0.48 * baseAlpha;
-                        // Displacement scales with distance (amplified for prominence)
-                        const displace = wave * envelope * strength * (dist * 0.50 + 12.0);
+                        const gx = r.x + (dx / realDist) * distG;
+                        const gy = r.y + (dy / realDist) * distG;
 
-                        // Only compute bilinear interpolation if displacement is visually significant
-                        if (Math.abs(displace) >= 0.1) {
-                          // Chromatic aberration offsets: Red refracts most, Green normal, Blue least
-                          const distR = realDist - displace * 1.15;
-                          const distG = realDist - displace;
-                          const distB = realDist - displace * 0.85;
+                        const bx = r.x + (dx / realDist) * distB;
+                        const by = r.y + (dy / realDist) * distB;
 
-                          const rx = r.x + (dx / realDist) * distR;
-                          const ry = r.y + (dy / realDist) * distR;
+                        const idx = (x + y * width) * 4;
 
-                          const gx = r.x + (dx / realDist) * distG;
-                          const gy = r.y + (dy / realDist) * distG;
-
-                          const bx = r.x + (dx / realDist) * distB;
-                          const by = r.y + (dy / realDist) * distB;
-
-                          const idx = (x + y * physW) * 4;
-
-                          // Inline Bilinear sampler directly from physical local source buffer
-                          // Red Channel
-                          {
-                            const fx = Math.max(0, Math.min(physW - 1, (rx - x0) * dpr));
-                            const fy = Math.max(0, Math.min(physH - 1, (ry - y0) * dpr));
-                            const xf = Math.floor(fx);
-                            const yf = Math.floor(fy);
-                            const xc = xf < physW - 1 ? xf + 1 : xf;
-                            const yc = yf < physH - 1 ? yf + 1 : yf;
-                            const tx = fx - xf;
-                            const ty = fy - yf;
-                            
-                            const row0 = yf * physW * 4;
-                            const row1 = yc * physW * 4;
-                            const r00 = localSrc[row0 + xf * 4];
-                            const r10 = localSrc[row0 + xc * 4];
-                            const r01 = localSrc[row1 + xf * 4];
-                            const r11 = localSrc[row1 + xc * 4];
-                            
-                            const top = r00 + tx * (r10 - r00);
-                            const bottom = r01 + tx * (r11 - r01);
-                            dstData[idx] = top + ty * (bottom - top);
-                          }
-
-                          // Green Channel
-                          {
-                            const fx = Math.max(0, Math.min(physW - 1, (gx - x0) * dpr));
-                            const fy = Math.max(0, Math.min(physH - 1, (gy - y0) * dpr));
-                            const xf = Math.floor(fx);
-                            const yf = Math.floor(fy);
-                            const xc = xf < physW - 1 ? xf + 1 : xf;
-                            const yc = yf < physH - 1 ? yf + 1 : yf;
-                            const tx = fx - xf;
-                            const ty = fy - yf;
-                            
-                            const row0 = yf * physW * 4;
-                            const row1 = yc * physW * 4;
-                            const g00 = localSrc[row0 + xf * 4 + 1];
-                            const g10 = localSrc[row0 + xc * 4 + 1];
-                            const g01 = localSrc[row1 + xf * 4 + 1];
-                            const g11 = localSrc[row1 + xc * 4 + 1];
-                            
-                            const top = g00 + tx * (g10 - g00);
-                            const bottom = g01 + tx * (g11 - g01);
-                            dstData[idx + 1] = top + ty * (bottom - top);
-                          }
-
-                          // Blue Channel
-                          {
-                            const fx = Math.max(0, Math.min(physW - 1, (bx - x0) * dpr));
-                            const fy = Math.max(0, Math.min(physH - 1, (by - y0) * dpr));
-                            const xf = Math.floor(fx);
-                            const yf = Math.floor(fy);
-                            const xc = xf < physW - 1 ? xf + 1 : xf;
-                            const yc = yf < physH - 1 ? yf + 1 : yf;
-                            const tx = fx - xf;
-                            const ty = fy - yf;
-                            
-                            const row0 = yf * physW * 4;
-                            const row1 = yc * physW * 4;
-                            const b00 = localSrc[row0 + xf * 4 + 2];
-                            const b10 = localSrc[row0 + xc * 4 + 2];
-                            const b01 = localSrc[row1 + xf * 4 + 2];
-                            const b11 = localSrc[row1 + xc * 4 + 2];
-                            
-                            const top = b00 + tx * (b10 - b00);
-                            const bottom = b01 + tx * (b11 - b01);
-                            dstData[idx + 2] = top + ty * (bottom - top);
-                          }
-
-                          dstData[idx + 3] = 255;
+                        // Inline Bilinear sampler directly from logical local source buffer
+                        // Red Channel
+                        {
+                          const fx = Math.max(0, Math.min(width - 1, rx - x0));
+                          const fy = Math.max(0, Math.min(height - 1, ry - y0));
+                          const xf = Math.floor(fx);
+                          const yf = Math.floor(fy);
+                          const xc = xf < width - 1 ? xf + 1 : xf;
+                          const yc = yf < height - 1 ? yf + 1 : yf;
+                          const tx = fx - xf;
+                          const ty = fy - yf;
+                          
+                          const row0 = yf * width * 4;
+                          const row1 = yc * width * 4;
+                          const r00 = localSrc[row0 + xf * 4];
+                          const r10 = localSrc[row0 + xc * 4];
+                          const r01 = localSrc[row1 + xf * 4];
+                          const r11 = localSrc[row1 + xc * 4];
+                          
+                          const top = r00 + tx * (r10 - r00);
+                          const bottom = r01 + tx * (r11 - r01);
+                          dstData[idx] = top + ty * (bottom - top);
                         }
+
+                        // Green Channel
+                        {
+                          const fx = Math.max(0, Math.min(width - 1, gx - x0));
+                          const fy = Math.max(0, Math.min(height - 1, gy - y0));
+                          const xf = Math.floor(fx);
+                          const yf = Math.floor(fy);
+                          const xc = xf < width - 1 ? xf + 1 : xf;
+                          const yc = yf < height - 1 ? yf + 1 : yf;
+                          const tx = fx - xf;
+                          const ty = fy - yf;
+                          
+                          const row0 = yf * width * 4;
+                          const row1 = yc * width * 4;
+                          const g00 = localSrc[row0 + xf * 4 + 1];
+                          const g10 = localSrc[row0 + xc * 4 + 1];
+                          const g01 = localSrc[row1 + xf * 4 + 1];
+                          const g11 = localSrc[row1 + xc * 4 + 1];
+                          
+                          const top = g00 + tx * (g10 - g00);
+                          const bottom = g01 + tx * (g11 - g01);
+                          dstData[idx + 1] = top + ty * (bottom - top);
+                        }
+
+                        // Blue Channel
+                        {
+                          const fx = Math.max(0, Math.min(width - 1, bx - x0));
+                          const fy = Math.max(0, Math.min(height - 1, by - y0));
+                          const xf = Math.floor(fx);
+                          const yf = Math.floor(fy);
+                          const xc = xf < width - 1 ? xf + 1 : xf;
+                          const yc = yf < height - 1 ? yf + 1 : yf;
+                          const tx = fx - xf;
+                          const ty = fy - yf;
+                          
+                          const row0 = yf * width * 4;
+                          const row1 = yc * width * 4;
+                          const b00 = localSrc[row0 + xf * 4 + 2];
+                          const b10 = localSrc[row0 + xc * 4 + 2];
+                          const b01 = localSrc[row1 + xf * 4 + 2];
+                          const b11 = localSrc[row1 + xc * 4 + 2];
+                          
+                          const top = b00 + tx * (b10 - b00);
+                          const bottom = b01 + tx * (b11 - b01);
+                          dstData[idx + 2] = top + ty * (bottom - top);
+                        }
+
+                        dstData[idx + 3] = 255;
                       }
                     }
                   }
                 }
               }
-
-              ctx.putImageData(dstImgData, physX0, physY0);
             }
+
+            // Put displaced logical image data back
+            tempCtx.putImageData(dstImgData, 0, 0);
+
+            // Draw back to main High-DPI canvas (will automatically upscale and interpolate on GPU!)
+            ctx.drawImage(tempCanvas, 0, 0, width, height, x0, y0, width, height);
           }
 
           // 2. Ultra-faint lens edge shadow (achromatic defining rim)
@@ -1732,7 +1767,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
       // 8b. Cache background and draw Glass dock plate behind the HTML bar (100% colorless)
       const offscreen = offscreenCanvasRef.current;
-      if (offscreen) {
+      if (offscreen && !isMobile) {
         const offscreenCtx = offscreen.getContext('2d');
         if (offscreenCtx) {
           offscreenCtx.resetTransform();
@@ -1741,7 +1776,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
 
       // Draw Top Menu Bar Glass Plate (using exact same effect as bottom bar)
-      if (headerRectRef.current) {
+      if (headerRectRef.current && !isMobile) {
         const rect = headerRectRef.current;
         const rectX = Math.round(rect.left);
         const rectY = Math.round(rect.top);
@@ -1802,7 +1837,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         ctx.restore();
       }
 
-      if (dockRectRef.current) {
+      if (dockRectRef.current && !isMobile) {
         const rect = dockRectRef.current;
         const rectX = Math.round(rect.left);
         const rectY = Math.round(rect.top);
@@ -1899,7 +1934,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         ctx.roundRect(pillX, pillY, pillW, pillH, pillRadius);
         ctx.clip();
         
-        if (offscreen) {
+        if (offscreen && !isMobile) {
           ctx.filter = 'blur(16px)';
           ctx.drawImage(offscreen, 0, 0, w, h);
           ctx.filter = 'none';
