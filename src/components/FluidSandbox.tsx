@@ -722,6 +722,72 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
     }
   };
 
+  const updateDOMRects = (isTransition = false) => {
+    const switcher = document.querySelector('.style-switcher') as HTMLElement;
+    if (switcher) {
+      const switcherRect = switcher.getBoundingClientRect();
+      dockRectRef.current = {
+        left: switcherRect.left,
+        top: switcherRect.top,
+        width: switcherRect.width,
+        height: switcherRect.height,
+      };
+
+      const activeBtn = switcher.querySelector('.hud-btn.active') as HTMLElement;
+      if (activeBtn) {
+        const activeRect = activeBtn.getBoundingClientRect();
+        const targetX = activeRect.left + activeRect.width / 2;
+        const targetY = activeRect.top + activeRect.height / 2;
+        const targetW = activeRect.width;
+        activeHeightRef.current = activeRect.height;
+
+        const now = performance.now();
+        if (pillXRef.current === null || !isTransition) {
+          pillXRef.current = targetX;
+          pillYRef.current = targetY;
+          startXRef.current = targetX;
+          startYRef.current = targetY;
+          targetXRef.current = targetX;
+          targetYRef.current = targetY;
+          
+          pillWidthRef.current = targetW;
+          startWidthRef.current = targetW;
+          targetWidthRef.current = targetW;
+          
+          transitionProgressRef.current = 1.0;
+          lastXRef.current = targetX;
+          lastYRef.current = targetY;
+        } else if (targetXRef.current !== targetX || targetYRef.current !== targetY) {
+          startXRef.current = pillXRef.current;
+          startYRef.current = pillYRef.current;
+          targetXRef.current = targetX;
+          targetYRef.current = targetY;
+          
+          startWidthRef.current = pillWidthRef.current !== null ? pillWidthRef.current : targetW;
+          targetWidthRef.current = targetW;
+          
+          transitionProgressRef.current = 0.0;
+          transitionStartTimeRef.current = now;
+        }
+      }
+    } else {
+      dockRectRef.current = null;
+    }
+
+    const header = document.querySelector('header.hud-card') as HTMLElement;
+    if (header) {
+      const headerRect = header.getBoundingClientRect();
+      headerRectRef.current = {
+        left: headerRect.left,
+        top: headerRect.top,
+        width: headerRect.width,
+        height: headerRect.height,
+      };
+    } else {
+      headerRectRef.current = null;
+    }
+  };
+
   const triggerClickAt = (x: number, y: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -783,6 +849,11 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
     if (modeRef.current !== mode) {
       modeRef.current = mode;
       modeChangedRef.current = true;
+
+      // Update switcher coordinates and start transition animation!
+      setTimeout(() => {
+        updateDOMRects(true);
+      }, 50);
 
       // on mobile when user tap to switch theme, do a one click at middle, so that user can see testimonial of effect.
       // only work when melody not play
@@ -1630,66 +1701,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       }
 
       // 8. Style switcher and top menu bar coordinates animation & rendering
-      const switcher = document.querySelector('.style-switcher') as HTMLElement;
-      if (switcher) {
-        const switcherRect = switcher.getBoundingClientRect();
-        dockRectRef.current = {
-          left: switcherRect.left,
-          top: switcherRect.top,
-          width: switcherRect.width,
-          height: switcherRect.height,
-        };
-
-        const activeBtn = switcher.querySelector('.hud-btn.active') as HTMLElement;
-        if (activeBtn) {
-          const activeRect = activeBtn.getBoundingClientRect();
-          const targetX = activeRect.left + activeRect.width / 2;
-          const targetY = activeRect.top + activeRect.height / 2;
-          const targetW = activeRect.width;
-          activeHeightRef.current = activeRect.height;
-
-          if (pillXRef.current === null) {
-            pillXRef.current = targetX;
-            pillYRef.current = targetY;
-            startXRef.current = targetX;
-            startYRef.current = targetY;
-            targetXRef.current = targetX;
-            targetYRef.current = targetY;
-            
-            pillWidthRef.current = targetW;
-            startWidthRef.current = targetW;
-            targetWidthRef.current = targetW;
-            
-            transitionProgressRef.current = 1.0;
-            lastXRef.current = targetX;
-            lastYRef.current = targetY;
-          } else if (targetXRef.current !== targetX || targetYRef.current !== targetY) {
-            startXRef.current = pillXRef.current;
-            startYRef.current = pillYRef.current;
-            targetXRef.current = targetX;
-            targetYRef.current = targetY;
-            
-            startWidthRef.current = pillWidthRef.current !== null ? pillWidthRef.current : targetW;
-            targetWidthRef.current = targetW;
-            
-            transitionProgressRef.current = 0.0;
-            transitionStartTimeRef.current = now;
-          }
-        }
-      }
-
-      // Track header bounds
-      const header = document.querySelector('header.hud-card') as HTMLElement;
-      if (header) {
-        const headerRect = header.getBoundingClientRect();
-        headerRectRef.current = {
-          left: headerRect.left,
-          top: headerRect.top,
-          width: headerRect.width,
-          height: headerRect.height,
-        };
-      } else {
-        headerRectRef.current = null;
+      if (dockRectRef.current === null && headerRectRef.current === null) {
+        updateDOMRects(false);
       }
 
       // 8a. Interpolate coordinates and width using cubic ease-in-out
