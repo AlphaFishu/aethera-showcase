@@ -102,6 +102,75 @@ footer .hud-btn {
   box-shadow: 0 0 15px var(--accent-glow);
 }
 
+/* Style Switcher Container Overrides */
+.style-switcher {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.style-switcher:hover {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Header HUD Container Overrides */
+header.hud-card {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+header.hud-card:hover {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Style Switcher Glass Button Overrides */
+.style-switcher .hud-btn {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  position: relative;
+  z-index: 1;
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.style-switcher .hud-btn:hover {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  transform: none !important;
+}
+
+.style-switcher .hud-btn.active {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  transform: none !important;
+  outline: none !important;
+}
+
+.hud-btn:focus,
+.hud-btn:focus-visible,
+.hud-btn:active,
+button:focus,
+button:focus-visible,
+button:active {
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
 /* Headings */
 h1, h2, h3 {
   font-family: var(--font-heading);

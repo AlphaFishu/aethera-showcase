@@ -24,7 +24,7 @@ function App() {
   const { width } = useWindowSize();
   const isMobile = width < 768;
   const [mode, setMode] = useState<'cosmic' | 'biolume' | 'hanabi' | 'sands'>('cosmic');
-  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [isPlayingMelody, setIsPlayingMelody] = useState(false);
   const [songIndex, setSongIndex] = useState(0);
@@ -148,21 +148,7 @@ function App() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '6px',
-              background: 'var(--accent-active)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 0 10px var(--accent-glow)',
-              transition: 'all 0.3s',
-            }}
-          >
-            <Sparkles size={12} style={{ color: '#fff' }} />
-          </div>
+          <Sparkles size={18} fill="#fff" color="#fff" style={{ flexShrink: 0 }} />
           <div>
             <h1
               style={{
@@ -310,39 +296,53 @@ function App() {
 
         {/* Center: Style Switcher Dock */}
         <div
-          className="hud-card"
+          className="hud-card style-switcher"
           style={{
             padding: isMobile ? '6px' : '8px',
             display: 'flex',
             gap: isMobile ? '4px' : '6px',
             pointerEvents: 'auto',
+            position: 'relative',
           }}
         >
+
           <button
             type="button"
             className={`hud-btn ${mode === 'cosmic' ? 'active' : ''}`}
-            onClick={() => setMode('cosmic')}
+            onClick={(e) => { e.stopPropagation(); setMode('cosmic'); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{ position: 'relative', zIndex: 1 }}
           >
             {isMobile ? 'Cosmic' : 'Cosmic Dust'}
           </button>
           <button
             type="button"
             className={`hud-btn ${mode === 'biolume' ? 'active' : ''}`}
-            onClick={() => setMode('biolume')}
+            onClick={(e) => { e.stopPropagation(); setMode('biolume'); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{ position: 'relative', zIndex: 1 }}
           >
             {isMobile ? 'Biolume' : 'Biolume Trails'}
           </button>
           <button
             type="button"
             className={`hud-btn ${mode === 'hanabi' ? 'active' : ''}`}
-            onClick={() => setMode('hanabi')}
+            onClick={(e) => { e.stopPropagation(); setMode('hanabi'); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{ position: 'relative', zIndex: 1 }}
           >
             {isMobile ? 'Hanabi' : 'Hanabi Theme'}
           </button>
           <button
             type="button"
             className={`hud-btn ${mode === 'sands' ? 'active' : ''}`}
-            onClick={() => setMode('sands')}
+            onClick={(e) => { e.stopPropagation(); setMode('sands'); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{ position: 'relative', zIndex: 1 }}
           >
             {isMobile ? 'Sands' : 'Flowing Sands'}
           </button>

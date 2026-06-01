@@ -8,6 +8,7 @@ interface FluidSandboxProps {
   onSetAnalyser: (analyser: AnalyserNode | null) => void;
   isPlayingMelody: boolean;
   songIndex: number;
+  pillPos?: { x: number; y: number; active: boolean } | null;
 }
 
 interface Particle {
@@ -239,12 +240,43 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   onSetAnalyser,
   isPlayingMelody,
   songIndex,
+  pillPos,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Audio nodes state
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+
+  // Switcher pill tracking
+  const pillPosRef = useRef(pillPos);
+  pillPosRef.current = pillPos;
+  const lastPillPos = useRef<{ x: number; y: number } | null>(null);
+  
+  const pillXRef = useRef<number | null>(null);
+  const pillYRef = useRef<number | null>(null);
+  const startXRef = useRef<number | null>(null);
+  const startYRef = useRef<number | null>(null);
+  const targetXRef = useRef<number | null>(null);
+  const targetYRef = useRef<number | null>(null);
+  
+  const pillWidthRef = useRef<number | null>(null);
+  const startWidthRef = useRef<number | null>(null);
+  const targetWidthRef = useRef<number | null>(null);
+  
+  const modeRef = useRef(mode);
+  const modeChangedRef = useRef<boolean>(false);
+  
+  const transitionProgressRef = useRef<number>(1.0);
+  const transitionStartTimeRef = useRef<number>(0);
+  const lastActiveModeRef = useRef<string | null>(null);
+  
+  const lastXRef = useRef<number>(0);
+  const lastYRef = useRef<number>(0);
+  
+  const activeHeightRef = useRef<number>(0);
+  const dockRectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+  const headerRectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
 
   // Visual ripples and melody control refs
   const ripples = useRef<VisualRipple[]>([]);
@@ -261,6 +293,9 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   const songIndexRef = useRef(songIndex);
   songIndexRef.current = songIndex;
 
+  const audioEnabledRef = useRef(audioEnabled);
+  audioEnabledRef.current = audioEnabled;
+
   const lastSongIndexRef = useRef<number | null>(null);
 
   const getHueFromFreq = (freq: number) => {
@@ -271,8 +306,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   };
 
   const addVisualRipple = (x: number, y: number) => {
-    // Limit active ripples to 3 to prevent performance degradation and overlapping overwrites
-    if (ripples.current.length >= 3) {
+    const maxRipples = isMobile ? 2 : 3;
+    if (ripples.current.length >= maxRipples) {
       ripples.current.shift();
     }
     ripples.current.push({
@@ -282,7 +317,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       maxRadius: isMobile ? 123.5 : 190, // 35% smaller on mobile
       alpha: 1.0,
       elapsedTime: 0,
-      duration: 1300, // 50% slower / 1.3 seconds duration
+      duration: isMobile ? 1000 : 1300, // 1 second on mobile, 1.3 seconds on desktop
       angle: Math.random() * Math.PI * 2, // Random orientation for asymmetry
       stretch: 0.92 + Math.random() * 0.05, // Stretches one axis slightly
     });
@@ -590,6 +625,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
   };
 
   const playChime = (xNormalized: number, force: number, customFreq?: number) => {
+    if (!audioEnabledRef.current) return;
+
     const ctx = audioCtxRef.current;
     const analyser = analyserRef.current;
     if (!ctx || !analyser) return;
@@ -667,7 +704,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         if (distPx < shockRadiusPx && distPx > 0) {
           const force = (shockRadiusPx - distPx) / shockRadiusPx;
           let pushForce = force * 6.5;
-          if (isMobile && mode === 'cosmic') {
+          if (isMobile && modeRef.current === 'cosmic') {
             pushForce *= 0.3; // 70% reduction
           }
 
@@ -685,6 +722,80 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
     }
   };
 
+  const triggerClickAt = (x: number, y: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    
+    if (audioEnabledRef.current) {
+      initAudio();
+      if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+    }
+
+    // Trigger visual/physical shockwave and sound chime
+    const norm = isMobile ? (1.0 - y / rect.height) : (x / rect.width);
+    triggerShockwave(x, y, rect.width, rect.height);
+
+    const noteIdx = Math.floor(norm * PENTATONIC.length);
+    const freq = PENTATONIC[Math.min(noteIdx, PENTATONIC.length - 1)];
+    
+    playChime(norm, 1.5);
+
+    // Add visual ripple
+    addVisualRipple(x, y);
+
+    // Calculate hue for particle burst
+    const hue = getHueFromFreq(freq);
+
+    // Inject small burst of particles for click
+    const activeMode = modeRef.current;
+    if (activeMode === 'hanabi') {
+      spawnHanabi(x, y, hue);
+    } else {
+      const count = activeMode === 'cosmic' ? 30 : activeMode === 'sands' ? 24 : 20; // biolume
+      for (let j = 0; j < count; j++) {
+        const angle = Math.random() * Math.PI * 2;
+        let pSpeed = Math.random() * 6.0 + 4.5; // Faster start, travels further
+        if (isMobile) {
+          if (activeMode === 'cosmic') {
+            pSpeed *= 0.3; // 70% reduction
+          } else if (activeMode === 'biolume') {
+            pSpeed *= 0.65; // 35% reduction
+          }
+        }
+        particles.current.push({
+          x,
+          y,
+          vx: Math.cos(angle) * pSpeed,
+          vy: Math.sin(angle) * pSpeed,
+          life: 1.0,
+          hue: activeMode === 'biolume' ? Math.random() * 360 : hue,
+          isBurst: true,
+        });
+      }
+    }
+  };
+
+  // Separate useEffect to sync modeRef and flag mode changes for the draw loop
+  useEffect(() => {
+    if (modeRef.current !== mode) {
+      modeRef.current = mode;
+      modeChangedRef.current = true;
+
+      // on mobile when user tap to switch theme, do a one click at middle, so that user can see testimonial of effect.
+      // only work when melody not play
+      if (isMobile && !isPlayingMelody) {
+        setTimeout(() => {
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          triggerClickAt(w / 2, h / 2);
+        }, 50);
+      }
+    }
+  }, [mode, isMobile, isPlayingMelody]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -695,8 +806,16 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
     let animId: number;
 
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const dpr = window.devicePixelRatio || 1;
+      const logicalWidth = window.innerWidth;
+      const logicalHeight = window.innerHeight;
+      
+      canvas.width = logicalWidth * dpr;
+      canvas.height = logicalHeight * dpr;
+
+      // Scale main canvas context
+      ctx.resetTransform();
+      ctx.scale(dpr, dpr);
 
       // Setup/Resize offscreen canvas
       if (!offscreenCanvasRef.current) {
@@ -714,49 +833,69 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
       const trailsCtx = trailsCanvasRef.current.getContext('2d');
       if (trailsCtx) {
+        trailsCtx.resetTransform();
+        trailsCtx.scale(dpr, dpr);
         trailsCtx.fillStyle = '#000000';
-        trailsCtx.fillRect(0, 0, canvas.width, canvas.height);
+        trailsCtx.fillRect(0, 0, logicalWidth, logicalHeight);
       }
 
       initParticles();
 
+      // Reset positions and widths for style switcher liquid glass chip
+      pillXRef.current = null;
+      pillYRef.current = null;
+      startXRef.current = null;
+      startYRef.current = null;
+      targetXRef.current = null;
+      targetYRef.current = null;
+      pillWidthRef.current = null;
+      startWidthRef.current = null;
+      targetWidthRef.current = null;
+      transitionProgressRef.current = 1.0;
+      lastActiveModeRef.current = null;
+      dockRectRef.current = null;
+      headerRectRef.current = null;
+
       // Automatically resume AudioContext if it gets suspended due to resolution/device toolbar changes
-      if (audioEnabled && audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+      if (audioEnabledRef.current && audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
         audioCtxRef.current.resume().catch(() => {});
       }
     };
 
     const initParticles = () => {
       particles.current = [];
+      const logicalWidth = window.innerWidth;
+      const logicalHeight = window.innerHeight;
       const baseArea = 1920 * 1080;
-      const currentArea = canvas.width * canvas.height;
+      const currentArea = logicalWidth * logicalHeight;
       const areaRatio = currentArea / baseArea;
+      const activeMode = modeRef.current;
 
       // Soft scaling: use the square root of the area ratio so it scales down more gently
       const scale = Math.max(0.4, Math.sqrt(areaRatio));
 
-      let baseCount = mode === 'cosmic' ? 6000 : mode === 'biolume' ? 2500 : mode === 'hanabi' ? 0 : 4500;
+      let baseCount = activeMode === 'cosmic' ? 6000 : activeMode === 'biolume' ? 2500 : activeMode === 'hanabi' ? 0 : 4500;
       let count = Math.round(baseCount * scale);
 
       if (isMobile) {
         // Apply the 30% reduction on mobile
         count = Math.round(count * 0.70);
         // Ensure a healthy minimum so it remains visually rich and interactive
-        if (mode === 'cosmic') count = Math.max(2200, count);
-        else if (mode === 'biolume') count = Math.max(1200, count);
-        else if (mode === 'sands') count = Math.max(1800, count);
+        if (activeMode === 'cosmic') count = Math.max(2200, count);
+        else if (activeMode === 'biolume') count = Math.max(1200, count);
+        else if (activeMode === 'sands') count = Math.max(1800, count);
       } else {
         // On desktop, ensure a minimum count as well
-        if (mode === 'cosmic') count = Math.max(4000, count);
-        else if (mode === 'biolume') count = Math.max(1800, count);
-        else if (mode === 'sands') count = Math.max(3000, count);
+        if (activeMode === 'cosmic') count = Math.max(4000, count);
+        else if (activeMode === 'biolume') count = Math.max(1800, count);
+        else if (activeMode === 'sands') count = Math.max(3000, count);
       }
 
       particleCount.current = count;
 
       for (let i = 0; i < count; i++) {
-        const rx = Math.random() * canvas.width;
-        const ry = Math.random() * canvas.height;
+        const rx = Math.random() * logicalWidth;
+        const ry = Math.random() * logicalHeight;
         particles.current.push({
           x: rx,
           y: ry,
@@ -766,22 +905,31 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           vy: 0,
           life: Math.random() * 0.5 + 0.5,
           hue: Math.random() * 360,
-          spin: mode === 'sands' ? Math.random() : undefined,
+          spin: activeMode === 'sands' ? Math.random() : undefined,
         });
       }
     };
 
-
-
     const drawLoop = () => {
-      const w = canvas.width;
-      const h = canvas.height;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
 
       const trailsCanvas = trailsCanvasRef.current;
       const trailsCtx = trailsCanvas ? trailsCanvas.getContext('2d') : null;
+      const activeMode = modeRef.current;
+
+      // 0. Handle mode transition reset
+      if (modeChangedRef.current) {
+        modeChangedRef.current = false;
+        initParticles();
+        if (trailsCtx) {
+          trailsCtx.fillStyle = '#000000';
+          trailsCtx.fillRect(0, 0, w, h);
+        }
+      }
 
       // Clear the main canvas to background color before redrawing
-      ctx.fillStyle = mode === 'hanabi' ? '#000000' : '#030303';
+      ctx.fillStyle = activeMode === 'hanabi' ? '#000000' : '#030303';
       ctx.fillRect(0, 0, w, h);
 
       // 1. Calculate delta time unconditionally (keeps physics/particles/ripples running when autoplay is off)
@@ -818,16 +966,43 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         density[i] *= 0.96;
       }
 
+      // 2b. If style switcher pill is moving, inject fluid drag force
+      if (pillXRef.current !== null && pillYRef.current !== null && lastPillPos.current) {
+        const px = pillXRef.current;
+        const py = pillYRef.current;
+        const dx = px - lastPillPos.current.x;
+        const dy = py - lastPillPos.current.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > 0.5) {
+          const gridX = Math.floor((px / w) * GRID_X);
+          const gridY = Math.floor((py / h) * GRID_Y);
+
+          if (gridX >= 0 && gridX < GRID_X && gridY >= 0 && gridY < GRID_Y) {
+            const idx = gridX + gridY * GRID_X;
+            const strength = 1.8;
+            u[idx] += dx * strength;
+            v[idx] += dy * strength;
+            density[idx] += 2.0;
+          }
+        }
+        lastPillPos.current = { x: px, y: py };
+      } else if (pillXRef.current !== null && pillYRef.current !== null) {
+        lastPillPos.current = { x: pillXRef.current, y: pillYRef.current };
+      } else {
+        lastPillPos.current = null;
+      }
+
       // 3. Clear/Fade trails canvas (draw background fades depending on render mode)
       if (trailsCtx) {
         // Fade the existing trails on the offscreen canvas by subtracting alpha (keeping background fully transparent)
         trailsCtx.save();
         trailsCtx.globalCompositeOperation = 'destination-out';
-        if (mode === 'cosmic') {
+        if (activeMode === 'cosmic') {
           trailsCtx.fillStyle = 'rgba(0, 0, 0, 0.08)';
-        } else if (mode === 'hanabi') {
+        } else if (activeMode === 'hanabi') {
           trailsCtx.fillStyle = 'rgba(0, 0, 0, 0.22)';
-        } else if (mode === 'sands') {
+        } else if (activeMode === 'sands') {
           trailsCtx.fillStyle = 'rgba(0, 0, 0, 0.22)';
         } else {
           trailsCtx.fillStyle = 'rgba(0, 0, 0, 0.08)'; // Biolume
@@ -836,13 +1011,13 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         trailsCtx.restore();
       } else {
         // Fallback: without offscreen buffer, we clear with alpha directly on main canvas
-        if (mode === 'cosmic') {
+        if (activeMode === 'cosmic') {
           ctx.fillStyle = 'rgba(3, 3, 3, 0.08)';
           ctx.fillRect(0, 0, w, h);
-        } else if (mode === 'hanabi') {
+        } else if (activeMode === 'hanabi') {
           ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
           ctx.fillRect(0, 0, w, h);
-        } else if (mode === 'sands') {
+        } else if (activeMode === 'sands') {
           ctx.fillStyle = 'rgba(3, 3, 3, 0.22)';
           ctx.fillRect(0, 0, w, h);
         } else {
@@ -854,7 +1029,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       // Update burst particles life and friction
       particles.current = particles.current.filter((p) => {
         if (p.isBurst) {
-          if (mode === 'hanabi') {
+          if (activeMode === 'hanabi') {
             if (p.spin === -999) {
               // Golden Kamuro (Weeping Willow) spark physics: heavy gravity, high air drag
               p.life -= dt / 2200; // Weeps for ~2.2s
@@ -874,7 +1049,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
             }
           } else {
             let decayDivisor = 2500;
-            if (mode === 'biolume') {
+            if (activeMode === 'biolume') {
               decayDivisor = isMobile ? 2700 : 2500; // 0.2s longer on mobile (2700ms)
             }
             p.life -= dt / decayDivisor; // Fly for ~2.5s (allows lingering trails)
@@ -900,7 +1075,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         if (gx >= 0 && gx < GRID_X && gy >= 0 && gy < GRID_Y) {
           const idx = gx + gy * GRID_X;
           // Apply velocity field
-          if (mode === 'hanabi' && p.isBurst) {
+          if (activeMode === 'hanabi' && p.isBurst) {
             // Fresh sparks ignore fluid drag to keep clean radial explosion vectors
             const blend = p.life > 0.45 ? 0.015 : 0.08;
             p.vx = p.vx * (1 - blend) + u[idx] * blend;
@@ -913,7 +1088,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         }
 
         // Organic random curling for Biolume Trails
-        if (mode === 'biolume') {
+        if (activeMode === 'biolume') {
           if (p.spin === undefined) {
             p.spin = (Math.random() - 0.5) * (isMobile ? 0.6 : 0.28);
           }
@@ -936,7 +1111,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         }
 
         // Flowing Sands Mode: falling and wind swirling blizzard mechanics
-        if (mode === 'sands') {
+        if (activeMode === 'sands') {
           if (p.spin === undefined) {
             p.spin = Math.random();
           }
@@ -969,7 +1144,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           if (p.isBurst) {
             p.life = 0; // dies next frame
           } else {
-            if (mode === 'sands') {
+            if (activeMode === 'sands') {
               if (p.y > h) {
                 p.y = 0;
                 p.x = Math.random() * w;
@@ -995,7 +1170,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         // Draw particle
         const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
 
-        if (mode === 'cosmic') {
+        if (activeMode === 'cosmic') {
           // Cosmic Dust Mode: Glowing blue-purple particles
           const baseAlpha = p.isBurst ? p.life : 1.0;
           const alpha = Math.min(0.8, (0.2 + speed * 0.1) * baseAlpha);
@@ -1004,7 +1179,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           drawCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
           drawCtx.fillStyle = `hsla(${270 + speed * 20}, 85%, 65%, ${alpha})`;
           drawCtx.fill();
-        } else if (mode === 'hanabi') {
+        } else if (activeMode === 'hanabi') {
           // Hanabi Theme: Fine-grain Japanese fireworks sparks with motion trails and white-hot cores
           const baseAlpha = p.isBurst ? p.life : 1.0;
           let alpha = Math.min(1.0, baseAlpha * 1.6);
@@ -1041,7 +1216,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
             drawCtx.fillStyle = `hsla(${currentHue}, 95%, 65%, ${alpha})`; // Saturated color shift
           }
           drawCtx.fill();
-        } else if (mode === 'sands') {
+        } else if (activeMode === 'sands') {
           // Flowing Sands Mode: ice-white and pale-cyan blizzard sand grains (smaller on mobile)
           const alpha = Math.min(0.85, 0.35 + speed * 0.15);
           const isCyan = (p.hue % 5) === 0;
@@ -1058,7 +1233,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
           const hue = (p.hue + speed * 5) % 360;
           drawCtx.strokeStyle = `hsla(${hue}, 90%, 60%, ${alpha})`;
           const rawWidth = Math.min(2.5, 0.8 + speed * 0.4) * (p.isBurst ? Math.sqrt(p.life) : 1.0);
-          drawCtx.lineWidth = rawWidth * (isMobile ? 0.65 : 1.0); // 35% smaller on mobile
+          drawCtx.lineWidth = rawWidth * (isMobile ? 0.65 : 1.0) * 1.15; // 35% smaller on mobile, 15% size increase
           drawCtx.beginPath();
 
           // Limit line trail length to prevent long lines connecting back to epicenter (35% shorter on mobile)
@@ -1075,7 +1250,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
       // 4. Now copy the trails canvas back onto the main canvas
       if (trailsCanvas) {
-        ctx.drawImage(trailsCanvas, 0, 0);
+        ctx.drawImage(trailsCanvas, 0, 0, w, h);
       }
 
       // 5. Draw channel dots nodes on main canvas
@@ -1178,17 +1353,17 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
             addVisualRipple(strikeX, strikeY);
 
             // Inject high-speed particle burst
-            if (mode === 'hanabi') {
+            if (activeMode === 'hanabi') {
               spawnHanabi(strikeX, strikeY, getHueFromFreq(r.freq));
             } else {
-              const burstCount = mode === 'cosmic' ? 40 : mode === 'sands' ? 32 : 28; // biolume
+              const burstCount = activeMode === 'cosmic' ? 40 : activeMode === 'sands' ? 32 : 28; // biolume
               for (let j = 0; j < burstCount; j++) {
                 const angle = Math.random() * Math.PI * 2;
                 let pSpeed = Math.random() * 6.0 + 4.5; // Faster start, travels further
                 if (isMobile) {
-                  if (mode === 'cosmic') {
+                  if (activeMode === 'cosmic') {
                     pSpeed *= 0.3; // 70% reduction
-                  } else if (mode === 'biolume') {
+                  } else if (activeMode === 'biolume') {
                     pSpeed *= 0.65; // 35% reduction
                   }
                 }
@@ -1198,7 +1373,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
                   vx: Math.cos(angle) * pSpeed,
                   vy: Math.sin(angle) * pSpeed,
                   life: 1.0, // Lifespan managed in ms in loop
-                  hue: mode === 'biolume' ? Math.random() * 360 : getHueFromFreq(r.freq), // Rainbow spray for Biolume notes!
+                  hue: activeMode === 'biolume' ? Math.random() * 360 : getHueFromFreq(r.freq), // Rainbow spray for Biolume notes!
                   isBurst: true,
                 });
               }
@@ -1242,6 +1417,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       // 7. Update and draw visual ripples (invisible gravitational lensing refraction with chromatic aberration)
       if (ripples.current.length > 0) {
         ctx.save();
+        const dpr = window.devicePixelRatio || 1;
         ripples.current = ripples.current.filter((r) => {
           r.elapsedTime += dt;
           const progress = Math.min(1.0, r.elapsedTime / r.duration);
@@ -1255,174 +1431,190 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
           if (progress >= 1.0) return false;
 
-          const R = r.radius;
+          const R = r.radius; // logical radius
           const baseAlpha = r.alpha;
           const cosA = Math.cos(r.angle);
           const sinA = Math.sin(r.angle);
           const stretch = r.stretch;
 
-          // Bounding box for the local ripple patch (extended slightly to account for asymmetry)
+          // Bounding box for the local ripple patch (logical coordinates)
           const pad = 12;
           const x0 = Math.max(0, Math.floor(r.x - R - pad));
           const y0 = Math.max(0, Math.floor(r.y - R - pad));
           const x1 = Math.min(w, Math.ceil(r.x + R + pad));
           const y1 = Math.min(h, Math.ceil(r.y + R + pad));
-          const width = x1 - x0;
-          const height = y1 - y0;
+          const width = x1 - x0; // logical width
+          const height = y1 - y0; // logical height
 
           if (width > 0 && height > 0) {
-            // Get current live canvas pixels for this bounding box
-            const dstImgData = ctx.getImageData(x0, y0, width, height);
-            const dstData = dstImgData.data;
+            // Convert logical bounding box to physical canvas coordinates
+            const physX0 = Math.round(x0 * dpr);
+            const physY0 = Math.round(y0 * dpr);
+            const physX1 = Math.round(x1 * dpr);
+            const physY1 = Math.round(y1 * dpr);
+            const physW = physX1 - physX0;
+            const physH = physY1 - physY0;
 
-            // Make a local copy to use as the source buffer for this displacement
-            const localSrc = new Uint8ClampedArray(dstData);
+            if (physW > 0 && physH > 0) {
+              // Get current live canvas pixels for this physical bounding box
+              const dstImgData = ctx.getImageData(physX0, physY0, physW, physH);
+              const dstData = dstImgData.data;
 
-            // Pre-calculate constants to optimize math in the inner loops
-            const stretch_cosA = cosA * stretch;
-            const sinA_div_stretch = sinA / stretch;
+              // Make a local copy to use as the source buffer for this displacement
+              const localSrc = new Uint8ClampedArray(dstData);
 
-            // Apply pixel-level displacement
-            for (let y = 0; y < height; y++) {
-              const py = y0 + y;
-              const dy = py - r.y;
-              
-              const dy_sinA = dy * sinA;
-              const dy_cosA = dy * cosA;
+              // Pre-calculate constants to optimize math in the inner loops
+              const stretch_cosA = cosA * stretch;
+              const sinA_div_stretch = sinA / stretch;
 
-              // Start values for ex and ey at x = 0 (px = x0, dx = x0 - r.x)
-              const startDx = x0 - r.x;
-              let ex = (startDx * cosA - dy_sinA) * stretch;
-              let ey = (startDx * sinA + dy_cosA) / stretch;
-
-              for (let x = 0; x < width; x++) {
-                const px = x0 + x;
-                const dx = px - r.x;
+              // Apply pixel-level displacement on physical pixel grid
+              for (let y = 0; y < physH; y++) {
+                // Convert current physical Y index to logical coordinate offset from ripple center
+                const py = (physY0 + y) / dpr;
+                const dy = py - r.y;
                 
-                const distSq = ex * ex + ey * ey;
+                const dy_sinA = dy * sinA;
+                const dy_cosA = dy * cosA;
 
-                // Increment ex and ey for next iteration (saves multiplications)
-                ex += stretch_cosA;
-                ey += sinA_div_stretch;
+                // Start values for ex and ey at x = 0 (px_phys = physX0, px = physX0 / dpr, dx = px - r.x)
+                const startDx = (physX0 / dpr) - r.x;
+                let ex = (startDx * cosA - dy_sinA) * stretch;
+                let ey = (startDx * sinA + dy_cosA) / stretch;
 
-                // Check if the pixel is inside the ripple bounding region
-                if (distSq < R * R) {
-                  const phi = fastAtan2(dy, dx);
-                  // Circumferential waviness: 5-fold and 3-fold harmonic modulation for natural asymmetry
-                  const waveWarp = 1.0 + 0.08 * Math.sin(phi * 5 + progress * 7.0) + 0.04 * Math.cos(phi * 3 - progress * 4.0);
-                  const dist = Math.sqrt(distSq) * waveWarp;
+                // We increment ex and ey in physical steps:
+                // Since dx increases by (1 / dpr) each step:
+                const stepEx = (1.0 / dpr) * stretch_cosA;
+                const stepEy = (1.0 / dpr) * sinA_div_stretch;
 
-                  if (dist < R) {
-                    const realDist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist > 0 && realDist > 0) {
-                      const t = dist / R;
-                      
-                      // Concentric ripple wave effect: multiple waves radiating out (with a secondary rhetoric wave layer)
-                      const wave = Math.sin(dist * 0.15 - progress * 12.0) + 0.35 * Math.sin(dist * 0.30 - progress * 24.0);
-                      // Envelope that is 0 at center (t=0) and outer edge (t=1), decaying towards edge
-                      const envelope = Math.sin(t * Math.PI) * Math.pow(1.0 - t, 0.5);
-                      
-                      const strength = 0.48 * baseAlpha;
-                      // Displacement scales with distance (amplified for prominence)
-                      const displace = wave * envelope * strength * (dist * 0.50 + 12.0);
+                for (let x = 0; x < physW; x++) {
+                  const px = (physX0 + x) / dpr;
+                  const dx = px - r.x;
+                  
+                  const distSq = ex * ex + ey * ey;
 
-                      // Only compute bilinear interpolation if displacement is visually significant
-                      if (Math.abs(displace) >= 0.1) {
-                        // Chromatic aberration offsets: Red refracts most, Green normal, Blue least
-                        const distR = realDist - displace * 1.15;
-                        const distG = realDist - displace;
-                        const distB = realDist - displace * 0.85;
+                  // Increment ex and ey for next physical iteration
+                  ex += stepEx;
+                  ey += stepEy;
 
-                        const rx = r.x + (dx / realDist) * distR;
-                        const ry = r.y + (dy / realDist) * distR;
+                  // Check if the pixel is inside the ripple bounding region
+                  if (distSq < R * R) {
+                    const phi = fastAtan2(dy, dx);
+                    // Circumferential waviness: 5-fold and 3-fold harmonic modulation for natural asymmetry
+                    const waveWarp = 1.0 + 0.08 * Math.sin(phi * 5 + progress * 7.0) + 0.04 * Math.cos(phi * 3 - progress * 4.0);
+                    const dist = Math.sqrt(distSq) * waveWarp;
 
-                        const gx = r.x + (dx / realDist) * distG;
-                        const gy = r.y + (dy / realDist) * distG;
+                    if (dist < R) {
+                      const realDist = Math.sqrt(dx * dx + dy * dy);
+                      if (dist > 0 && realDist > 0) {
+                        const t = dist / R;
+                        
+                        // Concentric ripple wave effect: multiple waves radiating out (with a secondary rhetoric wave layer)
+                        const wave = Math.sin(dist * 0.15 - progress * 12.0) + 0.35 * Math.sin(dist * 0.30 - progress * 24.0);
+                        // Envelope that is 0 at center (t=0) and outer edge (t=1), decaying towards edge
+                        const envelope = Math.sin(t * Math.PI) * Math.pow(1.0 - t, 0.5);
+                        
+                        const strength = 0.48 * baseAlpha;
+                        // Displacement scales with distance (amplified for prominence)
+                        const displace = wave * envelope * strength * (dist * 0.50 + 12.0);
 
-                        const bx = r.x + (dx / realDist) * distB;
-                        const by = r.y + (dy / realDist) * distB;
+                        // Only compute bilinear interpolation if displacement is visually significant
+                        if (Math.abs(displace) >= 0.1) {
+                          // Chromatic aberration offsets: Red refracts most, Green normal, Blue least
+                          const distR = realDist - displace * 1.15;
+                          const distG = realDist - displace;
+                          const distB = realDist - displace * 0.85;
 
-                        const idx = (x + y * width) * 4;
+                          const rx = r.x + (dx / realDist) * distR;
+                          const ry = r.y + (dy / realDist) * distR;
 
-                        // Inline Bilinear sampler directly from local source buffer
-                        // Red Channel
-                        {
-                          const fx = Math.max(0, Math.min(width - 1, rx - x0));
-                          const fy = Math.max(0, Math.min(height - 1, ry - y0));
-                          const xf = Math.floor(fx);
-                          const yf = Math.floor(fy);
-                          const xc = xf < width - 1 ? xf + 1 : xf;
-                          const yc = yf < height - 1 ? yf + 1 : yf;
-                          const tx = fx - xf;
-                          const ty = fy - yf;
-                          
-                          const row0 = yf * width * 4;
-                          const row1 = yc * width * 4;
-                          const r00 = localSrc[row0 + xf * 4];
-                          const r10 = localSrc[row0 + xc * 4];
-                          const r01 = localSrc[row1 + xf * 4];
-                          const r11 = localSrc[row1 + xc * 4];
-                          
-                          const top = r00 + tx * (r10 - r00);
-                          const bottom = r01 + tx * (r11 - r01);
-                          dstData[idx] = top + ty * (bottom - top);
+                          const gx = r.x + (dx / realDist) * distG;
+                          const gy = r.y + (dy / realDist) * distG;
+
+                          const bx = r.x + (dx / realDist) * distB;
+                          const by = r.y + (dy / realDist) * distB;
+
+                          const idx = (x + y * physW) * 4;
+
+                          // Inline Bilinear sampler directly from physical local source buffer
+                          // Red Channel
+                          {
+                            const fx = Math.max(0, Math.min(physW - 1, (rx - x0) * dpr));
+                            const fy = Math.max(0, Math.min(physH - 1, (ry - y0) * dpr));
+                            const xf = Math.floor(fx);
+                            const yf = Math.floor(fy);
+                            const xc = xf < physW - 1 ? xf + 1 : xf;
+                            const yc = yf < physH - 1 ? yf + 1 : yf;
+                            const tx = fx - xf;
+                            const ty = fy - yf;
+                            
+                            const row0 = yf * physW * 4;
+                            const row1 = yc * physW * 4;
+                            const r00 = localSrc[row0 + xf * 4];
+                            const r10 = localSrc[row0 + xc * 4];
+                            const r01 = localSrc[row1 + xf * 4];
+                            const r11 = localSrc[row1 + xc * 4];
+                            
+                            const top = r00 + tx * (r10 - r00);
+                            const bottom = r01 + tx * (r11 - r01);
+                            dstData[idx] = top + ty * (bottom - top);
+                          }
+
+                          // Green Channel
+                          {
+                            const fx = Math.max(0, Math.min(physW - 1, (gx - x0) * dpr));
+                            const fy = Math.max(0, Math.min(physH - 1, (gy - y0) * dpr));
+                            const xf = Math.floor(fx);
+                            const yf = Math.floor(fy);
+                            const xc = xf < physW - 1 ? xf + 1 : xf;
+                            const yc = yf < physH - 1 ? yf + 1 : yf;
+                            const tx = fx - xf;
+                            const ty = fy - yf;
+                            
+                            const row0 = yf * physW * 4;
+                            const row1 = yc * physW * 4;
+                            const g00 = localSrc[row0 + xf * 4 + 1];
+                            const g10 = localSrc[row0 + xc * 4 + 1];
+                            const g01 = localSrc[row1 + xf * 4 + 1];
+                            const g11 = localSrc[row1 + xc * 4 + 1];
+                            
+                            const top = g00 + tx * (g10 - g00);
+                            const bottom = g01 + tx * (g11 - g01);
+                            dstData[idx + 1] = top + ty * (bottom - top);
+                          }
+
+                          // Blue Channel
+                          {
+                            const fx = Math.max(0, Math.min(physW - 1, (bx - x0) * dpr));
+                            const fy = Math.max(0, Math.min(physH - 1, (by - y0) * dpr));
+                            const xf = Math.floor(fx);
+                            const yf = Math.floor(fy);
+                            const xc = xf < physW - 1 ? xf + 1 : xf;
+                            const yc = yf < physH - 1 ? yf + 1 : yf;
+                            const tx = fx - xf;
+                            const ty = fy - yf;
+                            
+                            const row0 = yf * physW * 4;
+                            const row1 = yc * physW * 4;
+                            const b00 = localSrc[row0 + xf * 4 + 2];
+                            const b10 = localSrc[row0 + xc * 4 + 2];
+                            const b01 = localSrc[row1 + xf * 4 + 2];
+                            const b11 = localSrc[row1 + xc * 4 + 2];
+                            
+                            const top = b00 + tx * (b10 - b00);
+                            const bottom = b01 + tx * (b11 - b01);
+                            dstData[idx + 2] = top + ty * (bottom - top);
+                          }
+
+                          dstData[idx + 3] = 255;
                         }
-
-                        // Green Channel
-                        {
-                          const fx = Math.max(0, Math.min(width - 1, gx - x0));
-                          const fy = Math.max(0, Math.min(height - 1, gy - y0));
-                          const xf = Math.floor(fx);
-                          const yf = Math.floor(fy);
-                          const xc = xf < width - 1 ? xf + 1 : xf;
-                          const yc = yf < height - 1 ? yf + 1 : yf;
-                          const tx = fx - xf;
-                          const ty = fy - yf;
-                          
-                          const row0 = yf * width * 4;
-                          const row1 = yc * width * 4;
-                          const g00 = localSrc[row0 + xf * 4 + 1];
-                          const g10 = localSrc[row0 + xc * 4 + 1];
-                          const g01 = localSrc[row1 + xf * 4 + 1];
-                          const g11 = localSrc[row1 + xc * 4 + 1];
-                          
-                          const top = g00 + tx * (g10 - g00);
-                          const bottom = g01 + tx * (g11 - g01);
-                          dstData[idx + 1] = top + ty * (bottom - top);
-                        }
-
-                        // Blue Channel
-                        {
-                          const fx = Math.max(0, Math.min(width - 1, bx - x0));
-                          const fy = Math.max(0, Math.min(height - 1, by - y0));
-                          const xf = Math.floor(fx);
-                          const yf = Math.floor(fy);
-                          const xc = xf < width - 1 ? xf + 1 : xf;
-                          const yc = yf < height - 1 ? yf + 1 : yf;
-                          const tx = fx - xf;
-                          const ty = fy - yf;
-                          
-                          const row0 = yf * width * 4;
-                          const row1 = yc * width * 4;
-                          const b00 = localSrc[row0 + xf * 4 + 2];
-                          const b10 = localSrc[row0 + xc * 4 + 2];
-                          const b01 = localSrc[row1 + xf * 4 + 2];
-                          const b11 = localSrc[row1 + xc * 4 + 2];
-                          
-                          const top = b00 + tx * (b10 - b00);
-                          const bottom = b01 + tx * (b11 - b01);
-                          dstData[idx + 2] = top + ty * (bottom - top);
-                        }
-
-                        dstData[idx + 3] = 255;
                       }
                     }
                   }
                 }
               }
-            }
 
-            ctx.putImageData(dstImgData, x0, y0);
+              ctx.putImageData(dstImgData, physX0, physY0);
+            }
           }
 
           // 2. Ultra-faint lens edge shadow (achromatic defining rim)
@@ -1437,6 +1629,345 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         ctx.restore();
       }
 
+      // 8. Style switcher and top menu bar coordinates animation & rendering
+      const switcher = document.querySelector('.style-switcher') as HTMLElement;
+      if (switcher) {
+        const switcherRect = switcher.getBoundingClientRect();
+        dockRectRef.current = {
+          left: switcherRect.left,
+          top: switcherRect.top,
+          width: switcherRect.width,
+          height: switcherRect.height,
+        };
+
+        const activeBtn = switcher.querySelector('.hud-btn.active') as HTMLElement;
+        if (activeBtn) {
+          const activeRect = activeBtn.getBoundingClientRect();
+          const targetX = activeRect.left + activeRect.width / 2;
+          const targetY = activeRect.top + activeRect.height / 2;
+          const targetW = activeRect.width;
+          activeHeightRef.current = activeRect.height;
+
+          if (pillXRef.current === null) {
+            pillXRef.current = targetX;
+            pillYRef.current = targetY;
+            startXRef.current = targetX;
+            startYRef.current = targetY;
+            targetXRef.current = targetX;
+            targetYRef.current = targetY;
+            
+            pillWidthRef.current = targetW;
+            startWidthRef.current = targetW;
+            targetWidthRef.current = targetW;
+            
+            transitionProgressRef.current = 1.0;
+            lastXRef.current = targetX;
+            lastYRef.current = targetY;
+          } else if (targetXRef.current !== targetX || targetYRef.current !== targetY) {
+            startXRef.current = pillXRef.current;
+            startYRef.current = pillYRef.current;
+            targetXRef.current = targetX;
+            targetYRef.current = targetY;
+            
+            startWidthRef.current = pillWidthRef.current !== null ? pillWidthRef.current : targetW;
+            targetWidthRef.current = targetW;
+            
+            transitionProgressRef.current = 0.0;
+            transitionStartTimeRef.current = now;
+          }
+        }
+      }
+
+      // Track header bounds
+      const header = document.querySelector('header.hud-card') as HTMLElement;
+      if (header) {
+        const headerRect = header.getBoundingClientRect();
+        headerRectRef.current = {
+          left: headerRect.left,
+          top: headerRect.top,
+          width: headerRect.width,
+          height: headerRect.height,
+        };
+      } else {
+        headerRectRef.current = null;
+      }
+
+      // 8a. Interpolate coordinates and width using cubic ease-in-out
+      const px = pillXRef.current;
+      const py = pillYRef.current;
+      const sx = startXRef.current;
+      const sy = startYRef.current;
+      const tx = targetXRef.current;
+      const ty = targetYRef.current;
+
+      const pw = pillWidthRef.current;
+      const sw = startWidthRef.current;
+      const tw = targetWidthRef.current;
+
+      if (px !== null && py !== null && sx !== null && sy !== null && tx !== null && ty !== null &&
+          pw !== null && sw !== null && tw !== null) {
+        if (transitionProgressRef.current < 1.0) {
+          const elapsed = now - transitionStartTimeRef.current;
+          const duration = 460; // 0.46s transition
+          const progress = Math.min(1.0, elapsed / duration);
+          transitionProgressRef.current = progress;
+          
+          // Cubic ease-in-out
+          const t = progress < 0.5 
+            ? 4 * progress * progress * progress 
+            : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+            
+          pillXRef.current = sx + (tx - sx) * t;
+          pillYRef.current = sy + (ty - sy) * t;
+          pillWidthRef.current = sw + (tw - sw) * t;
+        } else {
+          pillXRef.current = tx;
+          pillYRef.current = ty;
+          pillWidthRef.current = tw;
+        }
+      }
+
+      // 8b. Cache background and draw Glass dock plate behind the HTML bar (100% colorless)
+      const offscreen = offscreenCanvasRef.current;
+      if (offscreen) {
+        const offscreenCtx = offscreen.getContext('2d');
+        if (offscreenCtx) {
+          offscreenCtx.resetTransform();
+          offscreenCtx.drawImage(canvas, 0, 0);
+        }
+      }
+
+      // Draw Top Menu Bar Glass Plate (using exact same effect as bottom bar)
+      if (headerRectRef.current) {
+        const rect = headerRectRef.current;
+        const rectX = Math.round(rect.left);
+        const rectY = Math.round(rect.top);
+        const rectW = Math.round(rect.width);
+        const rectH = Math.round(rect.height);
+        const radius = isMobile ? 12 : 16;
+
+        ctx.save();
+        
+        // Clip and render GPU-accelerated frosted glass backdrop blur for the header container plate
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+        ctx.clip();
+        
+        if (offscreen) {
+          ctx.filter = 'blur(16px)';
+          ctx.drawImage(offscreen, 0, 0, w, h);
+          ctx.filter = 'none';
+        }
+        ctx.restore();
+
+        // Soft dark shadow under header plate
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetY = 3;
+        
+        ctx.fillStyle = 'rgba(8, 8, 12, 0.22)';
+        ctx.beginPath();
+        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+        ctx.fill();
+        ctx.restore();
+        
+        // Sheen reflection
+        const sheen = ctx.createLinearGradient(rectX, rectY, rectX + rectW * 0.2, rectY + rectH * 0.8);
+        sheen.addColorStop(0, 'rgba(255, 255, 255, 0.05)');
+        sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0.01)');
+        sheen.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+        ctx.fillStyle = sheen;
+        ctx.beginPath();
+        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+        ctx.fill();
+        
+        // Fine glass border with 45-degree diagonal gradient
+        const headerStroke = ctx.createLinearGradient(rectX, rectY, rectX + rectW, rectY + rectH);
+        headerStroke.addColorStop(0.0, 'rgba(255, 255, 255, 0.32)'); // Top-left highlight
+        headerStroke.addColorStop(0.3, 'rgba(255, 255, 255, 0.08)'); // Sides
+        headerStroke.addColorStop(0.7, 'rgba(255, 255, 255, 0.04)'); // Sides
+        headerStroke.addColorStop(1.0, 'rgba(255, 255, 255, 0.22)'); // Bottom-right reflection
+        
+        ctx.strokeStyle = headerStroke;
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+        ctx.stroke();
+        
+        ctx.restore();
+      }
+
+      if (dockRectRef.current) {
+        const rect = dockRectRef.current;
+        const rectX = Math.round(rect.left);
+        const rectY = Math.round(rect.top);
+        const rectW = Math.round(rect.width);
+        const rectH = Math.round(rect.height);
+        const radius = isMobile ? 12 : 16;
+
+        ctx.save();
+        
+        // Clip and render GPU-accelerated frosted glass backdrop blur for the dock container plate
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+        ctx.clip();
+        
+        if (offscreen) {
+          ctx.filter = 'blur(16px)';
+          ctx.drawImage(offscreen, 0, 0, w, h);
+          ctx.filter = 'none';
+        }
+        ctx.restore();
+
+        // Soft dark shadow under dock plate
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetY = 3;
+        
+        ctx.fillStyle = 'rgba(8, 8, 12, 0.22)';
+        ctx.beginPath();
+        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+        ctx.fill();
+        ctx.restore();
+        
+        // Sheen reflection
+        const sheen = ctx.createLinearGradient(rectX, rectY, rectX + rectW * 0.2, rectY + rectH * 0.8);
+        sheen.addColorStop(0, 'rgba(255, 255, 255, 0.05)');
+        sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0.01)');
+        sheen.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+        ctx.fillStyle = sheen;
+        ctx.beginPath();
+        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+        ctx.fill();
+        
+        // Fine glass border with 45-degree diagonal gradient
+        const dockStroke = ctx.createLinearGradient(rectX, rectY, rectX + rectW, rectY + rectH);
+        dockStroke.addColorStop(0.0, 'rgba(255, 255, 255, 0.32)'); // Top-left highlight
+        dockStroke.addColorStop(0.3, 'rgba(255, 255, 255, 0.08)'); // Sides
+        dockStroke.addColorStop(0.7, 'rgba(255, 255, 255, 0.04)'); // Sides
+        dockStroke.addColorStop(1.0, 'rgba(255, 255, 255, 0.22)'); // Bottom-right reflection
+        
+        ctx.strokeStyle = dockStroke;
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        ctx.roundRect(rectX, rectY, rectW, rectH, radius);
+        ctx.stroke();
+        
+        ctx.restore();
+      }
+
+      // 8c. Draw sliding colorless liquid glass active selection pill (iOS 26 concentric glass style)
+      const animX = pillXRef.current;
+      const animY = pillYRef.current;
+      const W = pillWidthRef.current;
+      const H = activeHeightRef.current;
+
+      if (animX !== null && animY !== null && W !== null && H > 0 && dockRectRef.current) {
+        const rect = dockRectRef.current;
+        ctx.save();
+        
+        // We update last positions to keep speed/angle tracking stable
+        lastXRef.current = animX;
+        lastYRef.current = animY;
+        
+        const gap = 4;
+        const pillRadius = isMobile ? 8 : 12;
+        const pillH = Math.round(rect.height - gap * 2);
+        const pillY = Math.round(rect.top + gap);
+        const pillW = Math.round(W - (isMobile ? 4 : 8)); // Reduced width to ensure padding from container edges
+        const pillX = Math.round(animX - pillW / 2);
+
+        // Draw ambient occlusion/shadow line under the active selection pill
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY + 1, pillW, pillH, pillRadius);
+        ctx.stroke();
+        ctx.restore();
+
+        // Clip and render GPU-accelerated frosted glass backdrop blur
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, pillRadius);
+        ctx.clip();
+        
+        if (offscreen) {
+          ctx.filter = 'blur(16px)';
+          ctx.drawImage(offscreen, 0, 0, w, h);
+          ctx.filter = 'none';
+        }
+        ctx.restore();
+
+        // Render neutral vertical linear gradient smoky glass fill overlay
+        ctx.save();
+        const fillGrad = ctx.createLinearGradient(pillX, pillY, pillX, pillY + pillH);
+        fillGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0.07)'); // top sheen
+        fillGrad.addColorStop(1.0, 'rgba(10, 10, 15, 0.28)'); // smoky dark bottom
+        ctx.fillStyle = fillGrad;
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, pillRadius);
+        ctx.fill();
+        ctx.restore();
+
+        // Render subtle inner shadow for depth (cast dark from bottom-right, light from top-left)
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, pillRadius);
+        ctx.clip();
+
+        // Dark inner shadow along bottom-right edge
+        // Offset path to the top-left by 2000px, and cast shadow back to the bottom-right
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetX = 2000 - 2;
+        ctx.shadowOffsetY = 2000 - 2;
+        ctx.strokeStyle = 'rgba(0, 0, 0, 1.0)';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.roundRect(pillX - 2000, pillY - 2000, pillW, pillH, pillRadius);
+        ctx.stroke();
+        ctx.restore();
+
+        // Soft white inner highlight along top-left edge
+        // Offset path to the bottom-right by 2000px, and cast shadow back to the top-left
+        ctx.save();
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.40)';
+        ctx.shadowBlur = 3;
+        ctx.shadowOffsetX = -2000 + 1.5;
+        ctx.shadowOffsetY = -2000 + 1.5;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 1.0)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(pillX + 2000, pillY + 2000, pillW, pillH, pillRadius);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.restore();
+
+        // Stroke vertical linear gradient outline simulating top-left to bottom-right diagonal bevel lighting
+        ctx.save();
+        const strokeGrad = ctx.createLinearGradient(pillX, pillY, pillX + pillW, pillY + pillH);
+        strokeGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0.90)'); // Top-left edge highlight (bright sunlight)
+        strokeGrad.addColorStop(0.3, 'rgba(255, 255, 255, 0.20)'); // Upper-right/bottom-left translucent sides
+        strokeGrad.addColorStop(0.7, 'rgba(255, 255, 255, 0.10)'); // Lower-right/top-left shadow sides
+        strokeGrad.addColorStop(1.0, 'rgba(255, 255, 255, 0.55)'); // Bottom-right reflection
+        
+        ctx.strokeStyle = strokeGrad;
+        ctx.lineWidth = isMobile ? 0.7 : 0.8; // Hairline 0.5-1px corner vector sharpness
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, pillRadius);
+        ctx.stroke();
+        ctx.restore();
+        
+        ctx.restore();
+      }
+
       animId = requestAnimationFrame(drawLoop);
     };
 
@@ -1448,7 +1979,7 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       window.removeEventListener('resize', resizeCanvas);
       cancelAnimationFrame(animId);
     };
-  }, [mode, isMobile]);
+  }, [isMobile]);
 
   // Autoplay Melody state resets
   useEffect(() => {
@@ -1491,60 +2022,49 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
 
   // Handle pointer interactions
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    initAudio();
-    if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-      audioCtxRef.current.resume().catch(() => {});
+    // If clicking inside the style switcher dock boundaries, ignore entirely
+    if (dockRectRef.current) {
+      const dRect = dockRectRef.current;
+      if (e.clientX >= dRect.left && e.clientX <= dRect.left + dRect.width &&
+          e.clientY >= dRect.top && e.clientY <= dRect.top + dRect.height) {
+        return;
+      }
     }
+    // If clicking inside the top menu bar boundaries, ignore entirely
+    if (headerRectRef.current) {
+      const hRect = headerRectRef.current;
+      if (e.clientX >= hRect.left && e.clientX <= hRect.left + hRect.width &&
+          e.clientY >= hRect.top && e.clientY <= hRect.top + hRect.height) {
+        return;
+      }
+    }
+
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
     lastMouse.current = { x, y, active: true };
-
-    // Trigger visual/physical shockwave and sound chime
-    const norm = isMobile ? (1.0 - y / rect.height) : (x / rect.width);
-    triggerShockwave(x, y, rect.width, rect.height);
-
-    const noteIdx = Math.floor(norm * PENTATONIC.length);
-    const freq = PENTATONIC[Math.min(noteIdx, PENTATONIC.length - 1)];
-    
-    playChime(norm, 1.5);
-
-    // Add visual ripple
-    addVisualRipple(x, y);
-
-    // Calculate hue for particle burst
-    const hue = getHueFromFreq(freq);
-
-    // Inject small burst of particles for click
-    if (mode === 'hanabi') {
-      spawnHanabi(x, y, hue);
-    } else {
-      const count = mode === 'cosmic' ? 30 : mode === 'sands' ? 24 : 20; // biolume
-      for (let j = 0; j < count; j++) {
-        const angle = Math.random() * Math.PI * 2;
-        let pSpeed = Math.random() * 6.0 + 4.5; // Faster start, travels further
-        if (isMobile) {
-          if (mode === 'cosmic') {
-            pSpeed *= 0.3; // 70% reduction
-          } else if (mode === 'biolume') {
-            pSpeed *= 0.65; // 35% reduction
-          }
-        }
-        particles.current.push({
-          x,
-          y,
-          vx: Math.cos(angle) * pSpeed,
-          vy: Math.sin(angle) * pSpeed,
-          life: 1.0,
-          hue: mode === 'biolume' ? Math.random() * 360 : hue, // Rainbow spray for Biolume clicks!
-          isBurst: true,
-        });
-      }
-    }
+    triggerClickAt(x, y);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // If moving inside the style switcher dock boundaries, ignore entirely
+    if (dockRectRef.current) {
+      const dRect = dockRectRef.current;
+      if (e.clientX >= dRect.left && e.clientX <= dRect.left + dRect.width &&
+          e.clientY >= dRect.top && e.clientY <= dRect.top + dRect.height) {
+        return;
+      }
+    }
+    // If moving inside the top menu bar boundaries, ignore entirely
+    if (headerRectRef.current) {
+      const hRect = headerRectRef.current;
+      if (e.clientX >= hRect.left && e.clientX <= hRect.left + hRect.width &&
+          e.clientY >= hRect.top && e.clientY <= hRect.top + hRect.height) {
+        return;
+      }
+    }
+
     if (!lastMouse.current.active) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
