@@ -854,18 +854,8 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
       setTimeout(() => {
         updateDOMRects(true);
       }, 50);
-
-      // on mobile when user tap to switch theme, do a one click at middle, so that user can see testimonial of effect.
-      // only work when melody not play
-      if (isMobile && !isPlayingMelody) {
-        setTimeout(() => {
-          const w = window.innerWidth;
-          const h = window.innerHeight;
-          triggerClickAt(w / 2, h / 2);
-        }, 50);
-      }
     }
-  }, [mode, isMobile, isPlayingMelody]);
+  }, [mode, isMobile]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -952,9 +942,9 @@ export const FluidSandbox: React.FC<FluidSandboxProps> = ({
         // Apply the 30% reduction on mobile
         count = Math.round(count * 0.70);
         // Ensure a healthy minimum so it remains visually rich and interactive
-        if (activeMode === 'cosmic') count = Math.max(2200, count);
-        else if (activeMode === 'biolume') count = Math.max(1200, count);
-        else if (activeMode === 'sands') count = Math.max(1800, count);
+        if (activeMode === 'cosmic') count = Math.max(1000, count);
+        else if (activeMode === 'biolume') count = Math.max(600, count);
+        else if (activeMode === 'sands') count = Math.max(800, count);
       } else {
         // On desktop, ensure a minimum count as well
         if (activeMode === 'cosmic') count = Math.max(4000, count);
